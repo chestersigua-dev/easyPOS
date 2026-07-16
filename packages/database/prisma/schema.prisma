@@ -1,0 +1,279 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Tenant {
+  id           String         @id @default(uuid())
+  name         String
+  subdomain    String?        @unique
+  plan         String         @default("TRIAL") // TRIAL, BASIC, ENTERPRISE
+  status       String         @default("ACTIVE") // ACTIVE, SUSPENDED
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  users        User[]
+  products     Product[]
+  customers    Customer[]
+  suppliers    Supplier[]
+  repairs      RepairTicket[]
+  sales        Sale[]
+  expenses     Expense[]
+  settings     Setting[]
+}
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  roleId         String
+  role           Role           @relation(fields: [roleId], references: [id])
+  tenantId       String
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
+  mfaSecret      String?
+  mfaEnabled     Boolean        @default(false)
+  profilePhoto   String?
+  status         String         @default("ACTIVE") // ACTIVE, INACTIVE, LOCKED
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  sessions       Session[]
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]
+  repairsAssigned RepairTicket[] @relation("Technician")
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique // SUPERADMIN, ADMIN, ACCOUNTING, SALES, REPAIRS
+  description String?
+  permissions Permission[]
+  users       User[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  action      String   @unique // e.g., "users:create", "sales:void"
+  description String?
+  roles       Role[]
+}
+
+model Product {
+  id           String          @id @default(uuid())
+  sku          String          @unique
+  barcode      String?
+  name         String
+  brand        String
+  category     String
+  description  String?
+  purchaseCost Float
+  sellingPrice Float
+  wholesalePrice Float
+  quantity     Int             @default(0)
+  minStock     Int             @default(5)
+  maxStock     Int             @default(100)
+  reorderLevel Int             @default(10)
+  warranty     String?
+  location     String?         // Warehouse shelf/bin location
+  serialized   Boolean         @default(false)
+  serialNumbers String?        // JSON list of serials
+  status       String          @default("ACTIVE")
+  tenantId     String
+  tenant       Tenant          @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  saleItems    SaleItem[]
+  stockHistory StockMovement[]
+}
+
+model StockMovement {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type        String   // IN, OUT, ADJUSTMENT, RETURN
+  quantity    Int
+  reason      String?
+  oldQuantity Int
+  newQuantity Int
+  createdBy   String
+  createdAt   DateTime @default(now())
+}
+
+model Customer {
+  id           String         @id
+  firstName    String
+  lastName     String
+  middleName   String?
+  mobile       String
+  email        String?
+  address      String?
+  city         String?
+  province     String?
+  birthday     DateTime?
+  gender       String?
+  loyaltyPoints Int           @default(0)
+  notes        String?
+  status       String         @default("ACTIVE")
+  tenantId     String
+  tenant       Tenant         @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  sales        Sale[]
+  repairs      RepairTicket[]
+}
+
+model Supplier {
+  id            String   @id @default(uuid())
+  companyName   String
+  contactPerson String
+  phone         String
+  email         String
+  address       String
+  tin           String?
+  notes         String?
+  balance       Float    @default(0)
+  status        String   @default("ACTIVE")
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Sale {
+  id           String     @id @default(uuid())
+  invoiceNo    String     @unique
+  customerId   String?
+  customer     Customer?  @relation(fields: [customerId], references: [id])
+  subtotal     Float
+  tax          Float
+  discount     Float      @default(0)
+  total        Float
+  status       String     @default("COMPLETED") // COMPLETED, VOID, HOLD, QUOTE
+  paymentType  String     // CASH, GCASH, MAYA, CC, BANK, SPLIT
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  createdBy    String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  items        SaleItem[]
+  payments     Payment[]
+}
+
+model SaleItem {
+  id        String   @id @default(uuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+  serialNo  String?  // Saved serial number if product is serialized
+  warranty  String?
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amount    Float
+  type      String   // CASH, GCASH, MAYA, CC, BANK
+  reference String?  // Transaction reference number
+  createdAt DateTime @default(now())
+}
+
+model RepairTicket {
+  id               String                 @id @default(uuid())
+  ticketNo         String                 @unique
+  customerId       String
+  customer         Customer               @relation(fields: [customerId], references: [id])
+  brand            String
+  model            String
+  serialNumber     String
+  accessories      String?
+  issueDescription String
+  internalNotes    String?
+  repairNotes      String?
+  cost             Float                  @default(0)
+  status           String                 @default("PENDING") // PENDING, DIAGNOSING, WAITING_PARTS, REPAIRING, COMPLETED, CLAIMED, EXPIRED, CANCELLED
+  technicianId     String?
+  technician       User?                  @relation("Technician", fields: [technicianId], references: [id])
+  customerSignature String?               // Base64 image data or path
+  technicianSignature String?             // Base64 image data or path
+  expirationDate   DateTime?
+  tenantId         String
+  tenant           Tenant                 @relation(fields: [tenantId], references: [id])
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  statusHistory    RepairStatusHistory[]
+}
+
+model RepairStatusHistory {
+  id             String       @id @default(uuid())
+  repairTicketId String
+  repairTicket   RepairTicket @relation(fields: [repairTicketId], references: [id], onDelete: Cascade)
+  status         String
+  notes          String?
+  updatedBy      String
+  createdAt      DateTime     @default(now())
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  category    String   // RENT, SALARIES, UTILITIES, SUPPLIES, OTHER
+  amount      Float
+  description String?
+  date        DateTime @default(now())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  action         String   // e.g., "DELETE_PRODUCT", "RESET_APPLICATION"
+  entity         String   // e.g., "Product", "System"
+  entityId       String?
+  oldValue       String?  // JSON string
+  newValue       String?  // JSON string
+  ipAddress      String?
+  userAgent      String?
+  endpoint       String?
+  success        Boolean  @default(true)
+  tenantId       String?
+  createdAt      DateTime @default(now())
+}
+
+model Setting {
+  id          String @id @default(uuid())
+  key         String // APP_NAME, APP_LOGO, BRAND_COLOR, TAX_RATE, CURRENCY, TIMEZONE
+  value       String
+  tenantId    String
+  tenant      Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
