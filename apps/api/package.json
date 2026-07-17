@@ -4,7 +4,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma && tsc",
+    "build": "DATABASE_URL=postgresql://build:build@localhost/build prisma generate --schema=../../packages/database/prisma/schema.prisma && tsc",
     "start": "node dist/server.js"
   },
   "dependencies": {

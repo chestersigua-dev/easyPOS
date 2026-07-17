@@ -7,7 +7,7 @@ services:
     startCommand: npm run start
     envVars:
       - key: DATABASE_URL
-        sync: false          # Set this in Render dashboard → Environment
+        sync: false          # Set this manually in Render dashboard → Environment
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
