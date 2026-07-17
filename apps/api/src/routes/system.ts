@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify";
 import { Prisma } from "@prisma/client";
 import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
-import { comparePassword, hashPassword } from "@easypos/auth";
+import { comparePassword, hashPassword } from "../utils/auth";
 import { verifyMfaToken } from "../utils/totp";
 import { logAudit } from "../utils/audit";
 import { createDatabaseBackup, restoreDatabaseFromBackup, listAvailableBackups } from "../utils/backup";

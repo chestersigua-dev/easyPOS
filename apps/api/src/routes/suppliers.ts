@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { SupplierSchema } from "@easypos/shared";
+import { SupplierSchema } from "../utils/shared";
 import prisma from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";

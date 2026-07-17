@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
-import { comparePassword, hashPassword, generateAccessToken, generateRefreshToken } from "@easypos/auth";
-import { LoginSchema, MfaVerifySchema } from "@easypos/shared";
+import { comparePassword, hashPassword, generateAccessToken, generateRefreshToken } from "../utils/auth";
+import { LoginSchema, MfaVerifySchema } from "../utils/shared";
 import prisma from "../utils/prisma";
 import { authenticate, requirePermission } from "../middleware/auth";
 import { generateMfaSecret, generateQrCodeDataUrl, verifyMfaToken } from "../utils/totp";

@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from "fastify";
-import { verifyAccessToken } from "@easypos/auth";
+import { verifyAccessToken } from "../utils/auth";
 import prisma from "../utils/prisma";
 
 export interface AuthenticatedUser {
