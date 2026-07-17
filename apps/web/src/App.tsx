@@ -19,7 +19,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  History
 } from "lucide-react";
 import { useAuthStore } from "./store/auth";
 import { api } from "./services/api";
@@ -34,6 +35,7 @@ import { SuppliersView } from "./components/SuppliersView";
 import { AccountingView } from "./components/AccountingView";
 import { SettingsView } from "./components/SettingsView";
 import { ResetView } from "./components/ResetView";
+import { SalesHistoryView } from "./components/SalesHistoryView";
 
 type Tab =
   | "DASHBOARD"
@@ -44,7 +46,8 @@ type Tab =
   | "SUPPLIERS"
   | "ACCOUNTING"
   | "SETTINGS"
-  | "RESET";
+  | "RESET"
+  | "SALES_HISTORY";
 
 export default function App() {
   const { user, accessToken, setAuth, logout } = useAuthStore();
@@ -175,6 +178,7 @@ export default function App() {
   const navigationItems = [
     { id: "DASHBOARD", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "ACCOUNTING"] },
     { id: "POS", label: "POS Screen", icon: ShoppingCart, roles: ["SUPERADMIN", "ADMIN", "SALES"] },
+    { id: "SALES_HISTORY", label: "Sales History", icon: History, roles: ["SUPERADMIN", "ADMIN", "SALES", "ACCOUNTING"] },
     { id: "PRODUCTS", label: "Inventory", icon: Cpu, roles: ["SUPERADMIN", "ADMIN", "ACCOUNTING", "REPAIRS"] },
     { id: "REPAIRS", label: "Repairs", icon: Wrench, roles: ["SUPERADMIN", "ADMIN", "REPAIRS"] },
     { id: "CUSTOMERS", label: "Customers", icon: Users, roles: ["SUPERADMIN", "ADMIN", "SALES", "REPAIRS"] },
@@ -477,6 +481,7 @@ export default function App() {
           {activeTab === "ACCOUNTING" && <AccountingView />}
           {activeTab === "SETTINGS" && <SettingsView />}
           {activeTab === "RESET" && <ResetView />}
+          {activeTab === "SALES_HISTORY" && <SalesHistoryView />}
         </main>
 
         {/* Sticky Footer */}

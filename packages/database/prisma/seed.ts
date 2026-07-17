@@ -15,6 +15,9 @@ async function main() {
   await prisma.repairStatusHistory.deleteMany();
   await prisma.repairTicket.deleteMany();
   await prisma.stockMovement.deleteMany();
+  await prisma.stockTransfer.deleteMany();
+  await prisma.storeInventory.deleteMany();
+  await prisma.store.deleteMany();
   await prisma.product.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.supplier.deleteMany();
@@ -243,6 +246,25 @@ async function main() {
 
   console.log("Seeded Users.");
 
+  // 6.5. Seed Stores
+  const store1 = await prisma.store.create({
+    data: {
+      name: "Quezon City Main Store",
+      address: "123 Tech Street, Cyberzone, Quezon City",
+      tenantId: tenant.id,
+    },
+  });
+
+  const store2 = await prisma.store.create({
+    data: {
+      name: "Makati Outlet Branch",
+      address: "45 Silicon Lane, Makati City",
+      tenantId: tenant.id,
+    },
+  });
+
+  console.log("Seeded Stores.");
+
   // 7. Seed Suppliers
   const supplier1 = await prisma.supplier.create({
     data: {
@@ -386,6 +408,37 @@ async function main() {
 
   console.log("Seeded Products.");
 
+  // Seed Store Inventories programmatically
+  const allProds = [prod1, prod2, prod3, prod4, prod5];
+  for (const p of allProds) {
+    const qty1 = Math.ceil(p.quantity * 0.6);
+    const qty2 = Math.max(0, p.quantity - qty1);
+
+    await prisma.storeInventory.create({
+      data: {
+        productId: p.id,
+        storeId: store1.id,
+        quantity: qty1,
+      },
+    });
+
+    await prisma.storeInventory.create({
+      data: {
+        productId: p.id,
+        storeId: store2.id,
+        quantity: qty2,
+      },
+    });
+  }
+
+  // Mark prod5 as non-taxable
+  await prisma.product.update({
+    where: { id: prod5.id },
+    data: { taxable: false },
+  });
+
+  console.log("Seeded Store Inventories.");
+
   // 9. Seed Customers
   const customer1 = await prisma.customer.create({
     data: {
@@ -467,6 +520,7 @@ async function main() {
       paymentType: "SPLIT",
       tenantId: tenant.id,
       createdBy: salesperson.id,
+      storeId: store1.id,
       items: {
         create: [
           { productId: prod1.id, quantity: 1, price: 34500.0 },
@@ -489,6 +543,15 @@ async function main() {
   });
   await prisma.product.update({
     where: { id: prod3.id },
+    data: { quantity: { decrement: 1 } },
+  });
+
+  await prisma.storeInventory.update({
+    where: { productId_storeId: { productId: prod1.id, storeId: store1.id } },
+    data: { quantity: { decrement: 1 } },
+  });
+  await prisma.storeInventory.update({
+    where: { productId_storeId: { productId: prod3.id, storeId: store1.id } },
     data: { quantity: { decrement: 1 } },
   });
 

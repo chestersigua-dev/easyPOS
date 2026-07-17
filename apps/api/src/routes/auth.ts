@@ -444,7 +444,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     const targetUser = await prisma.user.findUnique({ where: { id } });
     if (!targetUser) {
-      return reply.status(444).send({ error: "User not found" });
+      return reply.status(404).send({ error: "User not found" });
     }
 
     // Safety checks: Cannot demote or disable the SuperAdmin if doing so from normal accounts

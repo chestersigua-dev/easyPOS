@@ -26,6 +26,13 @@ export async function productRoutes(fastify: FastifyInstance) {
 
     const products = await prisma.product.findMany({
       where: whereClause,
+      include: {
+        storeInventories: {
+          include: {
+            store: true,
+          },
+        },
+      },
       orderBy: { name: "asc" },
     });
 
@@ -51,11 +58,32 @@ export async function productRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: "Product SKU already exists in store" });
     }
 
-    const newProduct = await prisma.product.create({
-      data: {
-        ...data,
-        tenantId: request.user!.tenantId,
-      },
+    const newProduct = await prisma.$transaction(async (tx) => {
+      const prod = await tx.product.create({
+        data: {
+          ...data,
+          tenantId: request.user!.tenantId,
+        },
+      });
+
+      // Initialize StoreInventory records for all stores in this tenant
+      const stores = await tx.store.findMany({
+        where: { tenantId: request.user!.tenantId },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Place initial product stock in the first store as default, others get 0
+      for (let i = 0; i < stores.length; i++) {
+        await tx.storeInventory.create({
+          data: {
+            productId: prod.id,
+            storeId: stores[i].id,
+            quantity: i === 0 ? prod.quantity : 0,
+          },
+        });
+      }
+
+      return prod;
     });
 
     // Create initial stock movement log if quantity > 0
@@ -112,6 +140,20 @@ export async function productRoutes(fastify: FastifyInstance) {
     // Log stock changes if direct edit occurred
     if (product.quantity !== updatedProduct.quantity) {
       const diff = updatedProduct.quantity - product.quantity;
+      
+      // Update store inventory for default branch to keep in sync
+      const firstStore = await prisma.store.findFirst({
+        where: { tenantId: request.user!.tenantId },
+        orderBy: { createdAt: "asc" },
+      });
+      if (firstStore) {
+        await prisma.storeInventory.upsert({
+          where: { productId_storeId: { productId: id, storeId: firstStore.id } },
+          create: { productId: id, storeId: firstStore.id, quantity: diff > 0 ? diff : 0 },
+          update: { quantity: { increment: diff } },
+        });
+      }
+
       await prisma.stockMovement.create({
         data: {
           productId: product.id,
@@ -337,7 +379,7 @@ export async function productRoutes(fastify: FastifyInstance) {
     const product = await prisma.product.findUnique({ where: { id } });
 
     if (!product || product.tenantId !== request.user!.tenantId) {
-      return reply.status(444).send({ error: "Product not found" });
+      return reply.status(404).send({ error: "Product not found" });
     }
 
     const movements = await prisma.stockMovement.findMany({

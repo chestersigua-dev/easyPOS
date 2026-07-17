@@ -63,6 +63,7 @@ export const ProductSchema = z.object({
   serialized: z.boolean().default(false),
   serialNumbers: z.string().optional().nullable(), // JSON string array
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
+  taxable: z.boolean().default(true),
 });
 export type ProductInput = z.infer<typeof ProductSchema>;
 
@@ -91,6 +92,14 @@ export const SaleSchema = z.object({
   status: z.enum(["COMPLETED", "VOID", "HOLD", "QUOTE"]).default("COMPLETED"),
   items: z.array(SaleItemSchema).min(1, "At least one item is required"),
   payments: z.array(PaymentInputSchema).optional(),
+  vatableSales: z.number().optional().nullable(),
+  vatAmount: z.number().optional().nullable(),
+  vatExemptSales: z.number().optional().nullable(),
+  zeroRatedSales: z.number().optional().nullable(),
+  scPwdId: z.string().optional().nullable(),
+  scPwdName: z.string().optional().nullable(),
+  scPwdTin: z.string().optional().nullable(),
+  storeId: z.string().optional().nullable(),
 });
 export type SaleInput = z.infer<typeof SaleSchema>;
 

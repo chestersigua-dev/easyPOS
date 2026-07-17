@@ -23,6 +23,7 @@ model Tenant {
   sales        Sale[]
   expenses     Expense[]
   settings     Setting[]
+  stores       Store[]
 }
 
 model User {
@@ -81,13 +82,16 @@ model Product {
   location     String?         // Warehouse shelf/bin location
   serialized   Boolean         @default(false)
   serialNumbers String?        // JSON list of serials
-  status       String          @default("ACTIVE")
-  tenantId     String
-  tenant       Tenant          @relation(fields: [tenantId], references: [id])
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  saleItems    SaleItem[]
-  stockHistory StockMovement[]
+  status           String           @default("ACTIVE")
+  taxable          Boolean          @default(true)
+  tenantId         String
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  saleItems        SaleItem[]
+  stockHistory     StockMovement[]
+  storeInventories StoreInventory[]
+  transfers        StockTransfer[]
 }
 
 model StockMovement {
@@ -144,23 +148,32 @@ model Supplier {
 }
 
 model Sale {
-  id           String     @id @default(uuid())
-  invoiceNo    String     @unique
-  customerId   String?
-  customer     Customer?  @relation(fields: [customerId], references: [id])
-  subtotal     Float
-  tax          Float
-  discount     Float      @default(0)
-  total        Float
-  status       String     @default("COMPLETED") // COMPLETED, VOID, HOLD, QUOTE
-  paymentType  String     // CASH, GCASH, MAYA, CC, BANK, SPLIT
-  tenantId     String
-  tenant       Tenant     @relation(fields: [tenantId], references: [id])
-  createdBy    String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  items        SaleItem[]
-  payments     Payment[]
+  id             String     @id @default(uuid())
+  invoiceNo      String     @unique
+  customerId     String?
+  customer       Customer?  @relation(fields: [customerId], references: [id])
+  subtotal       Float
+  tax            Float
+  discount       Float      @default(0)
+  total          Float
+  status         String     @default("COMPLETED") // COMPLETED, VOID, HOLD, QUOTE
+  paymentType    String     // CASH, GCASH, MAYA, CC, BANK, SPLIT
+  tenantId       String
+  tenant         Tenant     @relation(fields: [tenantId], references: [id])
+  createdBy      String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  items          SaleItem[]
+  payments       Payment[]
+  vatableSales   Float?
+  vatAmount      Float?
+  vatExemptSales Float?
+  zeroRatedSales Float?
+  scPwdId        String?
+  scPwdName      String?
+  scPwdTin       String?
+  storeId        String?
+  store          Store?     @relation(fields: [storeId], references: [id])
 }
 
 model SaleItem {
@@ -276,4 +289,44 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model Store {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  inventories StoreInventory[]
+  transfersFrom StockTransfer[] @relation("SourceStore")
+  transfersTo   StockTransfer[] @relation("TargetStore")
+  sales     Sale[]
+}
+
+model StoreInventory {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, storeId])
+}
+
+model StockTransfer {
+  id          String   @id @default(uuid())
+  sourceStoreId String
+  sourceStore   Store    @relation("SourceStore", fields: [sourceStoreId], references: [id])
+  targetStoreId String
+  targetStore   Store    @relation("TargetStore", fields: [targetStoreId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int
+  createdBy   String
+  createdAt   DateTime @default(now())
 }

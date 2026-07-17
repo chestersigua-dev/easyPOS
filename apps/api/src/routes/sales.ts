@@ -61,8 +61,23 @@ export async function saleRoutes(fastify: FastifyInstance) {
             throw new Error(`Product ${item.productId} not found`);
           }
 
-          if (product.quantity < item.quantity) {
-            throw new Error(`Insufficient stock for product: ${product.name}. Available: ${product.quantity}`);
+          if (data.storeId) {
+            const storeInv = await tx.storeInventory.findUnique({
+              where: { productId_storeId: { productId: item.productId, storeId: data.storeId } },
+            });
+            if (!storeInv || storeInv.quantity < item.quantity) {
+              throw new Error(`Insufficient stock for product: ${product.name} at the selected store location. Available: ${storeInv?.quantity || 0}`);
+            }
+
+            // Update store inventory
+            await tx.storeInventory.update({
+              where: { productId_storeId: { productId: item.productId, storeId: data.storeId } },
+              data: { quantity: { decrement: item.quantity } },
+            });
+          } else {
+            if (product.quantity < item.quantity) {
+              throw new Error(`Insufficient stock for product: ${product.name}. Available: ${product.quantity}`);
+            }
           }
 
           const oldQty = product.quantity;
@@ -96,10 +111,10 @@ export async function saleRoutes(fastify: FastifyInstance) {
               productId: item.productId,
               type: "OUT",
               quantity: item.quantity,
-              reason: `Sale ${invoiceNo}`,
+              reason: `Sale ${invoiceNo} ${data.storeId ? `(Store: ${data.storeId})` : ""}`,
               oldQuantity: oldQty,
               newQuantity: newQty,
-              createdBy: request.user!.id,
+              createdBy,
             },
           });
         }
@@ -129,6 +144,14 @@ export async function saleRoutes(fastify: FastifyInstance) {
             status: data.status,
             tenantId,
             createdBy,
+            storeId: data.storeId || null,
+            vatableSales: data.vatableSales ?? null,
+            vatAmount: data.vatAmount ?? null,
+            vatExemptSales: data.vatExemptSales ?? null,
+            zeroRatedSales: data.zeroRatedSales ?? null,
+            scPwdId: data.scPwdId ?? null,
+            scPwdName: data.scPwdName ?? null,
+            scPwdTin: data.scPwdTin ?? null,
             items: {
               create: data.items.map((it) => ({
                 productId: it.productId,
@@ -284,6 +307,7 @@ export async function saleRoutes(fastify: FastifyInstance) {
 
     const settings: any = {};
     settingsList.forEach((s) => {
+      settings[s.key] = s.value;
       if (s.key === "APP_NAME") settings.appName = s.value;
       if (s.key === "RECEIPT_HEADER") settings.receiptHeader = s.value;
       if (s.key === "RECEIPT_FOOTER") settings.receiptFooter = s.value;

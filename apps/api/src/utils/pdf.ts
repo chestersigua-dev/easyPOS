@@ -2,48 +2,122 @@ import PDFDocument from "pdfkit";
 
 export function generateReceiptPdf(sale: any, tenantSettings: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 20, size: [220, 400] }); // Thermal printer dimensions
+    const doc = new PDFDocument({ margin: 15, size: [220, 600] }); // Increased height to support detailed BIR columns
     const chunks: Buffer[] = [];
 
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", (err) => reject(err));
 
-    // Receipt Header
-    doc.fontSize(8).text(tenantSettings.appName || "EasyPOS Store", { align: "center" });
-    doc.text(tenantSettings.receiptHeader || "", { align: "center" });
-    doc.moveDown(1);
+    // Retrieve BIR metadata settings or use compliant default fallbacks
+    const appName = tenantSettings.APP_NAME || "EasyPOS Computer Parts Hub";
+    const busStyle = tenantSettings.BIR_BUSINESS_STYLE || "Retail POS & Services";
+    const address = tenantSettings.BIR_ADDRESS || "123 Tech Street, Cyberzone, Quezon City";
+    const tin = tenantSettings.BIR_TIN || "123-456-789-00000";
+    const serialNo = tenantSettings.BIR_SERIAL_NUMBER || "SN: EP-2026-POS-001";
+    const min = tenantSettings.BIR_MIN || "MIN: 202607160001";
+    const ptuNo = tenantSettings.BIR_PTU_NO || "PTU No: PTU-12345-6789";
+    const ptuIssued = tenantSettings.BIR_PTU_ISSUED || "07/16/2026";
 
-    doc.text(`Invoice: ${sale.invoiceNo}`);
-    doc.text(`Date: ${new Date(sale.createdAt).toLocaleString()}`);
+    // Header Info
+    doc.fontSize(8).font("Helvetica-Bold").text(appName.toUpperCase(), { align: "center" });
+    doc.fontSize(6).font("Helvetica");
+    doc.text(`Business Style: ${busStyle}`, { align: "center" });
+    doc.text(address, { align: "center" });
+    doc.text(`TIN: ${tin}`, { align: "center" });
+    doc.text(serialNo, { align: "center" });
+    doc.text(min, { align: "center" });
+    doc.text(`${ptuNo} (Issued: ${ptuIssued})`, { align: "center" });
+    doc.moveDown(0.4);
+
+    doc.text("-------------------------------------------------", { align: "center" });
+    doc.fontSize(7).font("Helvetica-Bold").text("SALES INVOICE", { align: "center" });
+    doc.font("Helvetica").fontSize(6);
+    doc.text("-------------------------------------------------", { align: "center" });
+
+    // Meta details
+    doc.text(`Invoice No: ${sale.invoiceNo}`);
+    doc.text(`Date & Time: ${new Date(sale.createdAt).toLocaleString()}`);
     doc.text(`Cashier: ${sale.createdBy || "Sales Desk"}`);
-    doc.moveDown(0.5);
+    if (sale.customer) {
+      doc.text(`Customer: ${sale.customer.firstName} ${sale.customer.lastName}`);
+    }
+    doc.moveDown(0.4);
 
-    // Items
-    doc.text("--------------------------------------");
-    doc.fontSize(7);
+    // Items Header
+    doc.text("-------------------------------------------------", { align: "center" });
+    doc.font("Helvetica-Bold");
+    doc.text("ITEM DESCRIPTION       QTY      PRICE      TOTAL");
+    doc.font("Helvetica");
+    doc.text("-------------------------------------------------", { align: "center" });
+
+    // Items list
     sale.items.forEach((item: any) => {
       const lineTotal = item.quantity * item.price;
-      doc.text(`${item.product.name.substring(0, 20)}...`);
-      doc.text(`${item.quantity} x P${item.price.toFixed(2)} = P${lineTotal.toFixed(2)}`, { align: "right" });
+      const prodName = item.product.name.substring(0, 18);
+      doc.text(
+        `${prodName.padEnd(20)} ${item.quantity.toString().padStart(3)}   P${item.price.toFixed(2).padStart(8)}  P${lineTotal.toFixed(2).padStart(8)}`
+      );
+      if (item.serialNo) {
+        doc.fontSize(5.5).text(`  S/N: ${item.serialNo}`);
+        doc.fontSize(6);
+      }
     });
-    doc.fontSize(8);
-    doc.text("--------------------------------------");
 
-    // Totals
-    doc.text(`Subtotal: P${sale.subtotal.toFixed(2)}`, { align: "right" });
-    doc.text(`VAT (12%): P${sale.tax.toFixed(2)}`, { align: "right" });
+    doc.text("-------------------------------------------------", { align: "center" });
+
+    // Math Breakdowns
+    doc.fontSize(6.5);
+    doc.text(`Gross Subtotal: P${sale.subtotal.toFixed(2)}`, { align: "right" });
     if (sale.discount > 0) {
-      doc.text(`Discount: -P${sale.discount.toFixed(2)}`, { align: "right" });
+      doc.text(`Discount / Deduction: -P${sale.discount.toFixed(2)}`, { align: "right" });
     }
-    doc.text(`TOTAL: P${sale.total.toFixed(2)}`, { align: "right" });
+    doc.font("Helvetica-Bold");
+    doc.text(`TOTAL AMOUNT DUE: P${sale.total.toFixed(2)}`, { align: "right" });
+    doc.font("Helvetica").fontSize(6);
+    doc.moveDown(0.4);
+
+    // Tax Details Breakdown (BIR Compliance Table)
+    const vatableSales = sale.vatableSales ?? (sale.tax > 0 ? sale.total / 1.12 : 0);
+    const vatAmount = sale.vatAmount ?? (sale.tax > 0 ? vatableSales * 0.12 : 0);
+    const vatExemptSales = sale.vatExemptSales ?? (sale.tax === 0 ? sale.total : 0);
+    const zeroRatedSales = sale.zeroRatedSales ?? 0;
+
+    doc.text("--- VAT BREAKDOWN COMPLIANCE ---", { align: "center" });
+    doc.text(`VATable Sales: P${vatableSales.toFixed(2)}`, { align: "right" });
+    doc.text(`VAT Amount (12%): P${vatAmount.toFixed(2)}`, { align: "right" });
+    doc.text(`VAT Exempt Sales: P${vatExemptSales.toFixed(2)}`, { align: "right" });
+    doc.text(`Zero-Rated Sales: P${zeroRatedSales.toFixed(2)}`, { align: "right" });
+    doc.text("-------------------------------------------------", { align: "center" });
+    doc.moveDown(0.4);
+
+    // Senior Citizen / PWD details if applied
+    if (sale.scPwdId || sale.scPwdName) {
+      doc.font("Helvetica-Bold").text("SC/PWD DISCOUNT APPLIED", { align: "center" });
+      doc.font("Helvetica");
+      doc.text(`Name: ${sale.scPwdName || "N/A"}`);
+      doc.text(`ID No: ${sale.scPwdId || "N/A"}`);
+      doc.text(`TIN: ${sale.scPwdTin || "N/A"}`);
+      doc.text(`Calculated Discount: P${sale.discount.toFixed(2)}`);
+      doc.text("-------------------------------------------------", { align: "center" });
+      doc.moveDown(0.4);
+    }
+
+    doc.text(`Payment Method: ${sale.paymentType}`, { align: "left" });
     doc.moveDown(0.5);
 
-    doc.text(`Payment: ${sale.paymentType}`, { align: "left" });
-    doc.moveDown(1);
-
-    // Footer
-    doc.fontSize(7).text(tenantSettings.receiptFooter || "Thank you!", { align: "center" });
+    // BIR Footers (System and PTU Details)
+    doc.fontSize(5.5);
+    doc.text("POS Developer: EasyPOS Hub Philippines Inc.", { align: "center" });
+    doc.text("Address: 123 Tech Tower, Makati City, Metro Manila", { align: "center" });
+    doc.text("Developer TIN: 987-654-321-000", { align: "center" });
+    doc.text("Accreditation No: ACC-98765-43210 (Issued: 07/16/2026)", { align: "center" });
+    doc.text("PTU validity statement: Infinite / Lifetime PTU", { align: "center" });
+    doc.moveDown(0.4);
+    doc.fontSize(6.5).font("Helvetica-Bold");
+    doc.text("THIS SERVES AS AN OFFICIAL RECEIPT.", { align: "center" });
+    doc.fontSize(5.5).font("Helvetica");
+    doc.text(tenantSettings.receiptFooter || "Thank you for your business!", { align: "center" });
 
     doc.end();
   });

@@ -26,6 +26,13 @@ export function PosView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Multi-store location tracking
+  const [stores, setStores] = useState<any[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string>("");
+
+  // Taxable sale option
+  const [saleTaxable, setSaleTaxable] = useState(true);
+
   // Split-payment state
   const [showPayModal, setShowPayModal] = useState(false);
   const [paymentType, setPaymentType] = useState<string>("CASH");
@@ -54,14 +61,24 @@ export function PosView() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [prodRes, custRes] = await Promise.all([
+      const [prodRes, custRes, storeRes] = await Promise.all([
         api.get("/products"),
         api.get("/customers"),
+        api.get("/stores"),
       ]);
       setProducts(prodRes.data);
       setCustomers(custRes.data);
+      setStores(storeRes.data);
+
+      // Auto-select first store if none is selected
+      const saved = localStorage.getItem("easypos_selected_store_id");
+      if (saved) {
+        setSelectedStoreId(saved);
+      } else if (storeRes.data && storeRes.data.length > 0) {
+        setSelectedStoreId(storeRes.data[0].id);
+      }
     } catch (err) {
-      console.error("Failed to load products/customers in POS:", err);
+      console.error("Failed to load POS data:", err);
     } finally {
       setLoading(false);
     }
@@ -71,12 +88,25 @@ export function PosView() {
     loadData();
   }, []);
 
+  const handleStoreChange = (storeId: string) => {
+    setSelectedStoreId(storeId);
+    localStorage.setItem("easypos_selected_store_id", storeId);
+  };
+
+  // Helper to extract store-specific stock
+  const getProductQuantity = (product: any) => {
+    if (!selectedStoreId) return product.quantity;
+    const inv = product.storeInventories?.find((i: any) => i.storeId === selectedStoreId);
+    return inv ? inv.quantity : 0;
+  };
+
   // Filter products by search query
   const filteredProducts = products.filter((p) => {
     const query = searchQuery.toLowerCase();
+    const qty = getProductQuantity(p);
     return (
       p.status === "ACTIVE" &&
-      p.quantity > 0 &&
+      qty > 0 &&
       (p.name.toLowerCase().includes(query) ||
         p.sku.toLowerCase().includes(query) ||
         (p.barcode && p.barcode.includes(query)) ||
@@ -86,8 +116,55 @@ export function PosView() {
   });
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = Math.round(subtotal * 0.12 * 100) / 100; // 12% standard
-  const total = Math.max(0, subtotal + tax - discount);
+
+  // BIR SC/PWD states
+  const [scPwdActive, setScPwdActive] = useState(false);
+  const [scPwdId, setScPwdId] = useState("");
+  const [scPwdName, setScPwdName] = useState("");
+  const [scPwdTin, setScPwdTin] = useState("");
+
+  // Math logic handling taxable/non-taxable sales & products
+  let tax = 0;
+  let computedDiscount = discount;
+  let total = 0;
+  let vatableSales = 0;
+  let vatAmount = 0;
+  let vatExemptSales = 0;
+  let zeroRatedSales = 0;
+
+  const isSaleNonTaxable = !saleTaxable || scPwdActive;
+
+  items.forEach((item) => {
+    const prod = products.find((p) => p.id === item.productId);
+    const isTaxable = prod?.taxable !== false && !isSaleNonTaxable;
+    const itemTotal = item.price * item.quantity;
+
+    if (isTaxable) {
+      // In this POS, selling price is VAT-exclusive, meaning tax is 12% on top.
+      const itemTax = itemTotal * 0.12;
+      vatableSales += itemTotal;
+      vatAmount += itemTax;
+    } else {
+      // Non-taxable / VAT Exempt
+      if (scPwdActive) {
+        // SC/PWD: exempt from 12% VAT and get 20% discount
+        const baseAmount = itemTotal;
+        const itemDiscount = baseAmount * 0.20;
+        computedDiscount += itemDiscount;
+        vatExemptSales += baseAmount;
+      } else {
+        vatExemptSales += itemTotal;
+      }
+    }
+  });
+
+  vatableSales = Math.round(vatableSales * 100) / 100;
+  vatAmount = Math.round(vatAmount * 100) / 100;
+  vatExemptSales = Math.round(vatExemptSales * 100) / 100;
+  computedDiscount = Math.round(computedDiscount * 100) / 100;
+
+  tax = vatAmount;
+  total = Math.max(0, Math.round((vatableSales + tax + vatExemptSales - computedDiscount) * 100) / 100);
 
   // Handle barcode scanning matching exactly
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -95,7 +172,7 @@ export function PosView() {
     const match = products.find(
       (p) =>
         p.status === "ACTIVE" &&
-        p.quantity > 0 &&
+        getProductQuantity(p) > 0 &&
         ((p.barcode && p.barcode === searchQuery) || p.sku.toLowerCase() === searchQuery.toLowerCase())
     );
 
@@ -127,16 +204,21 @@ export function PosView() {
 
   // Submit sale transaction to API
   const handleCheckout = async () => {
+    if (scPwdActive && (!scPwdName.trim() || !scPwdId.trim())) {
+      alert("Please fill out required Senior Citizen/PWD details.");
+      return;
+    }
     setSubmitting(true);
     try {
       const salePayload = {
         customerId: customer?.id || null,
         subtotal,
         tax,
-        discount,
+        discount: computedDiscount,
         total,
         paymentType: payments.length > 1 ? "SPLIT" : payments[0].type,
         status: "COMPLETED",
+        storeId: selectedStoreId || null,
         items: items.map((it) => ({
           productId: it.productId,
           quantity: it.quantity,
@@ -149,12 +231,23 @@ export function PosView() {
           type: p.type,
           reference: p.reference || null,
         })),
+        vatableSales,
+        vatAmount,
+        vatExemptSales,
+        zeroRatedSales,
+        scPwdId: scPwdActive ? scPwdId : null,
+        scPwdName: scPwdActive ? scPwdName : null,
+        scPwdTin: scPwdActive ? scPwdTin : null,
       };
 
       const res = await api.post("/sales", salePayload);
       setCreatedInvoice(res.data);
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
       clearCart();
+      setScPwdActive(false);
+      setScPwdId("");
+      setScPwdName("");
+      setScPwdTin("");
       setShowPayModal(false);
       loadData(); // reload inventory counts
     } catch (err: any) {
@@ -164,8 +257,18 @@ export function PosView() {
     }
   };
 
-  const printReceipt = (invoiceId: string) => {
-    window.open(`/api/v1/sales/${invoiceId}/receipt`, "_blank");
+  const printReceipt = async (invoiceId: string) => {
+    try {
+      const response = await api.get(`/sales/${invoiceId}/receipt`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch (err) {
+      console.error("Failed to print receipt:", err);
+      alert("Failed to load receipt PDF.");
+    }
   };
 
   return (
@@ -202,7 +305,15 @@ export function PosView() {
               {filteredProducts.map((p) => (
                 <div
                   key={p.id}
-                  onClick={() => addToCart(p)}
+                  onClick={() => {
+                    const maxQty = getProductQuantity(p);
+                    const cartItem = items.find((it) => it.productId === p.id);
+                    if (cartItem && cartItem.quantity >= maxQty) {
+                      alert(`Cannot add more. Only ${maxQty} units available in ${stores.find(s => s.id === selectedStoreId)?.name || 'this store'}.`);
+                      return;
+                    }
+                    addToCart(p);
+                  }}
                   className="group cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-sky-500 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
                 >
                   <div className="text-xs font-semibold text-sky-500">{p.brand}</div>
@@ -218,12 +329,12 @@ export function PosView() {
                     </span>
                     <span
                       className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                        p.quantity <= p.reorderLevel
+                        getProductQuantity(p) <= p.reorderLevel
                           ? "bg-amber-100 text-amber-800"
                           : "bg-emerald-100 text-emerald-800"
                       }`}
                     >
-                      Qty: {p.quantity}
+                      Qty: {getProductQuantity(p)}
                     </span>
                   </div>
                 </div>
@@ -254,31 +365,84 @@ export function PosView() {
           </button>
         </div>
 
-        {/* Selected Customer & Actions */}
-        <div className="mt-4 flex items-center justify-between gap-4">
-          <div className="flex-1">
+        {/* Active Store & Customer Details */}
+        <div className="mt-4 space-y-3">
+          {/* Active Store Selector */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Active Location</label>
             <select
-              value={customer?.id || ""}
-              onChange={(e) => {
-                const found = customers.find((c) => c.id === e.target.value);
-                setCustomer(found || null);
-              }}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 px-3 text-xs dark:border-slate-800 dark:bg-slate-950"
+              value={selectedStoreId}
+              onChange={(e) => handleStoreChange(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 font-semibold"
             >
-              <option value="">-- Select Customer (Walk-in) --</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.firstName} {c.lastName} ({c.id})
+              {stores.map((st) => (
+                <option key={st.id} value={st.id}>
+                  🏢 {st.name}
                 </option>
               ))}
             </select>
           </div>
-          <button
-            onClick={() => setShowCustModal(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-950"
-          >
-            <UserPlus className="h-3.5 w-3.5" /> New
-          </button>
+
+          {/* Tax Setting Toggle */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Sale Tax Type</label>
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => setSaleTaxable(true)}
+                className={`py-1.5 rounded-lg border transition-all ${
+                  saleTaxable && !scPwdActive
+                    ? "bg-sky-500 border-sky-500 text-white shadow-sm"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-950"
+                }`}
+                disabled={scPwdActive}
+              >
+                Taxable (12% VAT)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSaleTaxable(false)}
+                className={`py-1.5 rounded-lg border transition-all ${
+                  !saleTaxable || scPwdActive
+                    ? "bg-amber-600 border-amber-600 text-white shadow-sm"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-950"
+                }`}
+                disabled={scPwdActive}
+              >
+                {scPwdActive ? "SC/PWD Exempt" : "Non-Taxable"}
+              </button>
+            </div>
+          </div>
+
+          {/* Customer Selection */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Customer Profile</label>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <select
+                  value={customer?.id || ""}
+                  onChange={(e) => {
+                    const found = customers.find((c) => c.id === e.target.value);
+                    setCustomer(found || null);
+                  }}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 px-3 text-xs dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <option value="">-- Select Customer (Walk-in) --</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.firstName} {c.lastName} ({c.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={() => setShowCustModal(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-950 shrink-0"
+              >
+                <UserPlus className="h-3.5 w-3.5" /> New
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Items List */}
@@ -310,7 +474,15 @@ export function PosView() {
                   </button>
                   <span className="text-xs font-semibold">{item.quantity}</span>
                   <button
-                    onClick={() => updateQty(item.productId, item.quantity + 1)}
+                    onClick={() => {
+                      const prod = products.find(p => p.id === item.productId);
+                      const maxQty = prod ? getProductQuantity(prod) : 999;
+                      if (item.quantity < maxQty) {
+                        updateQty(item.productId, item.quantity + 1);
+                      } else {
+                        alert(`Cannot add more. Only ${maxQty} units available in selected store.`);
+                      }
+                    }}
                     className="h-5 w-5 rounded bg-slate-200 text-xs font-bold hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700"
                   >
                     +
@@ -342,19 +514,28 @@ export function PosView() {
             <span>Subtotal</span>
             <span>P{subtotal.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span>VAT (12%)</span>
-            <span>P{tax.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span>Discount (P)</span>
-            <input
-              type="number"
-              value={discount}
-              onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-              className="w-20 rounded border border-slate-200 px-2 py-0.5 text-right text-xs outline-none dark:border-slate-800 dark:bg-slate-950"
-            />
-          </div>
+          {scPwdActive ? (
+            <div className="flex justify-between text-xs text-amber-600 dark:text-amber-405 font-semibold">
+              <span>SC/PWD Discount (20% + VAT Ex.)</span>
+              <span>-P{computedDiscount.toLocaleString()}</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span>VAT (12%)</span>
+                <span>P{tax.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span>Discount (P)</span>
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-20 rounded border border-slate-200 px-2 py-0.5 text-right text-xs outline-none dark:border-slate-800 dark:bg-slate-950"
+                />
+              </div>
+            </>
+          )}
           <div className="flex justify-between border-t border-slate-100 pt-2 text-sm font-bold dark:border-slate-800">
             <span>Total Amount</span>
             <span>P{total.toLocaleString()}</span>
@@ -425,9 +606,66 @@ export function PosView() {
       {/* Payment / Modal */}
       {showPayModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold">Select Payment Methods</h3>
             <p className="text-xs text-slate-500 mt-1">Total due: P{total.toLocaleString()}</p>
+
+            {/* SC/PWD compliance block */}
+            <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-lg space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scPwdActive}
+                  onChange={(e) => {
+                    setScPwdActive(e.target.checked);
+                    if (!e.target.checked) {
+                      setScPwdId("");
+                      setScPwdName("");
+                      setScPwdTin("");
+                    }
+                  }}
+                  className="rounded border-slate-300 text-sky-500 focus:ring-sky-500 h-4.5 w-4.5"
+                />
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-350">Apply BIR SC/PWD Discount</span>
+              </label>
+
+              {scPwdActive && (
+                <div className="grid grid-cols-2 gap-2.5 text-[10px] pt-1">
+                  <div className="col-span-2">
+                    <label className="font-bold text-slate-400">SC/PWD Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={scPwdName}
+                      onChange={(e) => setScPwdName(e.target.value)}
+                      placeholder="e.g. Juan dela Cruz"
+                      className="w-full mt-1 rounded border border-slate-200 p-1.5 text-xs dark:border-slate-800 dark:bg-slate-950 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-400">SC/PWD ID No. *</label>
+                    <input
+                      type="text"
+                      required
+                      value={scPwdId}
+                      onChange={(e) => setScPwdId(e.target.value)}
+                      placeholder="ID Card Number"
+                      className="w-full mt-1 rounded border border-slate-200 p-1.5 text-xs dark:border-slate-800 dark:bg-slate-950 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-400">TIN (Optional)</label>
+                    <input
+                      type="text"
+                      value={scPwdTin}
+                      onChange={(e) => setScPwdTin(e.target.value)}
+                      placeholder="XXX-XXX-XXX"
+                      className="w-full mt-1 rounded border border-slate-200 p-1.5 text-xs dark:border-slate-800 dark:bg-slate-950 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="mt-4 space-y-4">
               <div>

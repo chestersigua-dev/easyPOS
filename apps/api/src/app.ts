@@ -13,6 +13,8 @@ import { saleRoutes } from "./routes/sales";
 import { repairRoutes } from "./routes/repairs";
 import { accountingRoutes } from "./routes/accounting";
 import { systemRoutes } from "./routes/system";
+import { storeRoutes } from "./routes/stores";
+import { transferRoutes } from "./routes/transfers";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = fastify({ logger: true });
@@ -70,6 +72,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.register(repairRoutes, { prefix: "/api/v1/repairs" });
   app.register(accountingRoutes, { prefix: "/api/v1/accounting" });
   app.register(systemRoutes, { prefix: "/api/v1/system" });
+  app.register(storeRoutes, { prefix: "/api/v1/stores" });
+  app.register(transferRoutes, { prefix: "/api/v1/transfers" });
 
   // Simple Health Check
   app.get("/health", async () => {
