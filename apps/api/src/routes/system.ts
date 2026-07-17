@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import { Prisma } from "@prisma/client";
 import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { comparePassword, hashPassword } from "@easypos/auth";
@@ -156,7 +157,7 @@ export async function systemRoutes(fastify: FastifyInstance) {
 
     // 6. Destructive transactional changes based on options
     try {
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // Option dataReset: Clean transaction files
         if (options.dataReset) {
           await tx.payment.deleteMany();
@@ -280,7 +281,7 @@ export async function systemRoutes(fastify: FastifyInstance) {
       const backup = createDatabaseBackup();
 
       // 2. Full purge inside a transaction
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await tx.setting.deleteMany();
         await tx.expense.deleteMany();
         await tx.payment.deleteMany();
@@ -365,7 +366,7 @@ export async function systemRoutes(fastify: FastifyInstance) {
       const backup = createDatabaseBackup();
 
       // 2. Remove all demo/sample records
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // Delete transactional logs
         await tx.payment.deleteMany();
         await tx.saleItem.deleteMany();

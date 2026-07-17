@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import { Prisma } from "@prisma/client";
 import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";
@@ -39,7 +40,7 @@ export async function transferRoutes(fastify: FastifyInstance) {
     const tenantId = request.user!.tenantId;
 
     try {
-      const transfer = await prisma.$transaction(async (tx) => {
+      const transfer = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // 1. Verify stores and product belong to tenant
         const [sourceStore, targetStore, product] = await Promise.all([
           tx.store.findFirst({ where: { id: sourceStoreId, tenantId } }),

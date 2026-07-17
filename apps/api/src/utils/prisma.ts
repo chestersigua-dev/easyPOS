@@ -1,8 +1,10 @@
-import { PrismaClient } from "@easypos/database";
+import { PrismaClient } from "@prisma/client";
 import * as path from "path";
 import * as fs from "fs";
 
-const isPostgres = process.env.DATABASE_URL?.startsWith("postgresql") || process.env.DATABASE_URL?.startsWith("postgres");
+const isPostgres =
+  process.env.DATABASE_URL?.startsWith("postgresql") ||
+  process.env.DATABASE_URL?.startsWith("postgres");
 
 // ── SQLite fallback ──────────────────────────────────────────────────────────
 if (!process.env.DATABASE_URL) {
@@ -55,8 +57,8 @@ if (isPostgres) {
           await tempClient.$disconnect();
           console.log("[prisma] Cleaned transaction tables in nontaxable.db.");
         })
-        .catch((err) => console.error("[prisma] Failed to clean nontaxable.db:", err));
-    } catch (err) {
+        .catch((err: unknown) => console.error("[prisma] Failed to clean nontaxable.db:", err));
+    } catch (err: unknown) {
       console.error("[prisma] Failed to clone nontaxable.db:", err);
     }
   }
