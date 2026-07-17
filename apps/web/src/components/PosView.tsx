@@ -386,32 +386,18 @@ export function PosView() {
           {/* Tax Setting Toggle */}
           <div className="space-y-1">
             <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Sale Tax Type</label>
-            <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
-              <button
-                type="button"
-                onClick={() => setSaleTaxable(true)}
-                className={`py-1.5 rounded-lg border transition-all ${
-                  saleTaxable && !scPwdActive
-                    ? "bg-sky-500 border-sky-500 text-white shadow-sm"
-                    : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-950"
-                }`}
-                disabled={scPwdActive}
-              >
-                Taxable (12% VAT)
-              </button>
-              <button
-                type="button"
-                onClick={() => setSaleTaxable(false)}
-                className={`py-1.5 rounded-lg border transition-all ${
-                  !saleTaxable || scPwdActive
-                    ? "bg-amber-600 border-amber-600 text-white shadow-sm"
-                    : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-950"
-                }`}
-                disabled={scPwdActive}
-              >
-                {scPwdActive ? "SC/PWD Exempt" : "Non-Taxable"}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSaleTaxable(!saleTaxable)}
+              className={`w-full py-1.5 rounded-lg border text-[11px] font-bold transition-all select-none ${
+                saleTaxable && !scPwdActive
+                  ? "bg-sky-500 border-sky-500 text-white shadow-sm hover:bg-sky-600"
+                  : "bg-slate-100 border-slate-200 text-slate-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-750"
+              }`}
+              disabled={scPwdActive}
+            >
+              VAT 12%
+            </button>
           </div>
 
           {/* Customer Selection */}

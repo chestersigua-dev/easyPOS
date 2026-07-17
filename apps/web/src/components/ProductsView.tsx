@@ -47,7 +47,7 @@ export function ProductsView() {
 
   // Stock adjustment modal
   const [showAdjModal, setShowAdjModal] = useState(false);
-  const [adjData, setAdjData] = useState({ productId: "", type: "IN", quantity: 1, reason: "" });
+  const [adjData, setAdjData] = useState({ productId: "", type: "IN", quantity: 1, reason: "", storeId: "" });
 
   const loadProducts = async () => {
     setLoading(true);
@@ -106,18 +106,22 @@ export function ProductsView() {
       location: "",
       serialized: false,
       taxable: true,
+      storeId: stores[0]?.id || "",
     });
     setShowModal(true);
   };
 
   const openEditModal = (p: any) => {
     setEditingProduct(p);
-    setFormData({ ...p });
+    setFormData({
+      ...p,
+      storeId: p.storeInventories?.[0]?.storeId || stores[0]?.id || "",
+    });
     setShowModal(true);
   };
 
   const openAdjModal = (p: any) => {
-    setAdjData({ productId: p.id, type: "IN", quantity: 1, reason: "" });
+    setAdjData({ productId: p.id, type: "IN", quantity: 1, reason: "", storeId: stores[0]?.id || "" });
     setShowAdjModal(true);
   };
 
@@ -278,7 +282,7 @@ export function ProductsView() {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by SKU, name, brand, category..."
+                placeholder="Search by SKU, name, brand, category, store/branch..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 py-1.5 pl-10 pr-4 text-xs outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:border-slate-800 dark:bg-slate-950"
@@ -680,7 +684,7 @@ export function ProductsView() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-[10px] font-bold text-slate-400">Warranty</label>
                 <input
@@ -698,6 +702,22 @@ export function ProductsView() {
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                   className="w-full rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-800 dark:bg-slate-950"
                 />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400">Target Store Branch *</label>
+                <select
+                  required
+                  value={formData.storeId || ""}
+                  onChange={(e) => setFormData({ ...formData, storeId: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <option value="">-- Choose Branch --</option>
+                  {stores.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      🏢 {st.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -790,6 +810,23 @@ export function ProductsView() {
                   className="w-full rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-800 dark:bg-slate-950"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400">Branch to Adjust *</label>
+              <select
+                required
+                value={(adjData as any).storeId || ""}
+                onChange={(e) => setAdjData({ ...adjData, storeId: e.target.value })}
+                className="w-full rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-800 dark:bg-slate-950"
+              >
+                <option value="">-- Choose Branch --</option>
+                {stores.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    🏢 {st.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

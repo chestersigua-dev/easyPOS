@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { SaleSchema } from "@easypos/shared";
-import prisma from "../utils/prisma";
+import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";
 import { generateReceiptPdf } from "../utils/pdf";
@@ -9,21 +9,32 @@ async function generateInvoiceNumber(tenantId: string): Promise<string> {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const prefix = `INV-${dateStr}-`;
 
-  const count = await prisma.sale.count({
-    where: {
-      tenantId,
-      invoiceNo: { startsWith: prefix },
-    },
-  });
+  const [countMain, countNontax] = await Promise.all([
+    prisma.sale.count({
+      where: {
+        tenantId,
+        invoiceNo: { startsWith: prefix },
+      },
+    }),
+    nontaxablePrisma.sale.count({
+      where: {
+        tenantId,
+        invoiceNo: { startsWith: prefix },
+      },
+    }),
+  ]);
 
+  const count = countMain + countNontax;
   const nextNum = String(count + 1).padStart(4, "0");
   return `${prefix}${nextNum}`;
 }
 
 export async function saleRoutes(fastify: FastifyInstance) {
-  // Get all sales
+  // Get all sales (taxable or non-taxable depending on query parameters)
   fastify.get("/", { preHandler: requirePermission("sales:read") }, async (request) => {
-    return prisma.sale.findMany({
+    const { nontaxable } = request.query as { nontaxable?: string };
+    const dbSalesClient = nontaxable === "true" ? nontaxablePrisma : prisma;
+    return dbSalesClient.sale.findMany({
       where: { tenantId: request.user!.tenantId },
       include: {
         customer: true,
@@ -44,6 +55,7 @@ export async function saleRoutes(fastify: FastifyInstance) {
     const data = parseResult.data;
     const tenantId = request.user!.tenantId;
     const createdBy = `${request.user!.email}`;
+    const isNonTaxable = data.tax === 0 || data.vatAmount === 0 || !data.vatableSales;
 
     // Process sale transaction atomically
     try {
@@ -74,6 +86,14 @@ export async function saleRoutes(fastify: FastifyInstance) {
               where: { productId_storeId: { productId: item.productId, storeId: data.storeId } },
               data: { quantity: { decrement: item.quantity } },
             });
+
+            // Sync store inventory update to nontaxable db
+            try {
+              await nontaxablePrisma.storeInventory.update({
+                where: { productId_storeId: { productId: item.productId, storeId: data.storeId } },
+                data: { quantity: { decrement: item.quantity } },
+              });
+            } catch (err) {}
           } else {
             if (product.quantity < item.quantity) {
               throw new Error(`Insufficient stock for product: ${product.name}. Available: ${product.quantity}`);
@@ -105,6 +125,17 @@ export async function saleRoutes(fastify: FastifyInstance) {
             },
           });
 
+          // Sync product table update to nontaxable db
+          try {
+            await nontaxablePrisma.product.update({
+              where: { id: item.productId },
+              data: {
+                quantity: newQty,
+                serialNumbers: updatedSerialsStr,
+              },
+            });
+          } catch (err) {}
+
           // Log stock movement
           await tx.stockMovement.create({
             data: {
@@ -129,51 +160,107 @@ export async function saleRoutes(fastify: FastifyInstance) {
               loyaltyPoints: { increment: pointsEarned },
             },
           });
+
+          // Sync loyalty points to nontaxable db
+          try {
+            await nontaxablePrisma.customer.update({
+              where: { id: data.customerId },
+              data: {
+                loyaltyPoints: { increment: pointsEarned },
+              },
+            });
+          } catch (err) {}
         }
 
         // 4. Create Sale
-        const sale = await tx.sale.create({
-          data: {
-            invoiceNo,
-            customerId: data.customerId || null,
-            subtotal: data.subtotal,
-            tax: data.tax,
-            discount: data.discount,
-            total: data.total,
-            paymentType: data.paymentType,
-            status: data.status,
-            tenantId,
-            createdBy,
-            storeId: data.storeId || null,
-            vatableSales: data.vatableSales ?? null,
-            vatAmount: data.vatAmount ?? null,
-            vatExemptSales: data.vatExemptSales ?? null,
-            zeroRatedSales: data.zeroRatedSales ?? null,
-            scPwdId: data.scPwdId ?? null,
-            scPwdName: data.scPwdName ?? null,
-            scPwdTin: data.scPwdTin ?? null,
-            items: {
-              create: data.items.map((it) => ({
-                productId: it.productId,
-                quantity: it.quantity,
-                price: it.price,
-                serialNo: it.serialNo || null,
-                warranty: it.warranty || null,
-              })),
+        let sale;
+        if (isNonTaxable) {
+          sale = await nontaxablePrisma.sale.create({
+            data: {
+              invoiceNo,
+              customerId: data.customerId || null,
+              subtotal: data.subtotal,
+              tax: data.tax,
+              discount: data.discount,
+              total: data.total,
+              paymentType: data.paymentType,
+              status: data.status,
+              tenantId,
+              createdBy,
+              storeId: data.storeId || null,
+              vatableSales: data.vatableSales ?? null,
+              vatAmount: data.vatAmount ?? null,
+              vatExemptSales: data.vatExemptSales ?? null,
+              zeroRatedSales: data.zeroRatedSales ?? null,
+              scPwdId: data.scPwdId ?? null,
+              scPwdName: data.scPwdName ?? null,
+              scPwdTin: data.scPwdTin ?? null,
+              items: {
+                create: data.items.map((it) => ({
+                  productId: it.productId,
+                  quantity: it.quantity,
+                  price: it.price,
+                  serialNo: it.serialNo || null,
+                  warranty: it.warranty || null,
+                })),
+              },
+              payments: {
+                create: data.payments?.map((pay) => ({
+                  amount: pay.amount,
+                  type: pay.type,
+                  reference: pay.reference || null,
+                })) || [],
+              },
             },
-            payments: {
-              create: data.payments?.map((pay) => ({
-                amount: pay.amount,
-                type: pay.type,
-                reference: pay.reference || null,
-              })) || [],
+            include: {
+              items: { include: { product: true } },
+              payments: true,
             },
-          },
-          include: {
-            items: { include: { product: true } },
-            payments: true,
-          },
-        });
+          });
+        } else {
+          sale = await tx.sale.create({
+            data: {
+              invoiceNo,
+              customerId: data.customerId || null,
+              subtotal: data.subtotal,
+              tax: data.tax,
+              discount: data.discount,
+              total: data.total,
+              paymentType: data.paymentType,
+              status: data.status,
+              tenantId,
+              createdBy,
+              storeId: data.storeId || null,
+              vatableSales: data.vatableSales ?? null,
+              vatAmount: data.vatAmount ?? null,
+              vatExemptSales: data.vatExemptSales ?? null,
+              zeroRatedSales: data.zeroRatedSales ?? null,
+              scPwdId: data.scPwdId ?? null,
+              scPwdName: data.scPwdName ?? null,
+              scPwdTin: data.scPwdTin ?? null,
+              items: {
+                create: data.items.map((it) => ({
+                  productId: it.productId,
+                  quantity: it.quantity,
+                  price: it.price,
+                  serialNo: it.serialNo || null,
+                  warranty: it.warranty || null,
+                })),
+              },
+              payments: {
+                create: data.payments?.map((pay) => ({
+                  amount: pay.amount,
+                  type: pay.type,
+                  reference: pay.reference || null,
+                })) || [],
+              },
+            },
+            include: {
+              items: { include: { product: true } },
+              payments: true,
+            },
+          });
+        }
 
         return sale;
       });
@@ -197,10 +284,21 @@ export async function saleRoutes(fastify: FastifyInstance) {
   fastify.post("/:id/void", { preHandler: requirePermission("sales:void") }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const sale = await prisma.sale.findUnique({
+    let sale = await prisma.sale.findUnique({
       where: { id },
       include: { items: true },
     });
+
+    let isNontaxable = false;
+    if (!sale) {
+      sale = await nontaxablePrisma.sale.findUnique({
+        where: { id },
+        include: { items: true },
+      });
+      if (sale) {
+        isNontaxable = true;
+      }
+    }
 
     if (!sale || sale.tenantId !== request.user!.tenantId) {
       return reply.status(404).send({ error: "Sale invoice not found" });
@@ -237,6 +335,17 @@ export async function saleRoutes(fastify: FastifyInstance) {
               },
             });
 
+            // Sync updated quantity to nontaxable db
+            try {
+              await nontaxablePrisma.product.update({
+                where: { id: item.productId },
+                data: {
+                  quantity: newQty,
+                  serialNumbers: updatedSerialsStr,
+                },
+              });
+            } catch (err) {}
+
             await tx.stockMovement.create({
               data: {
                 productId: item.productId,
@@ -260,13 +369,30 @@ export async function saleRoutes(fastify: FastifyInstance) {
               loyaltyPoints: { decrement: pointsEarned },
             },
           });
+
+          // Sync loyalty points deduction to nontaxable db
+          try {
+            await nontaxablePrisma.customer.update({
+              where: { id: sale.customerId },
+              data: {
+                loyaltyPoints: { decrement: pointsEarned },
+              },
+            });
+          } catch (err) {}
         }
 
-        // Mark invoice status as VOID
-        await tx.sale.update({
-          where: { id },
-          data: { status: "VOID" },
-        });
+        // Mark invoice status as VOID in the respective database
+        if (isNontaxable) {
+          await nontaxablePrisma.sale.update({
+            where: { id },
+            data: { status: "VOID" },
+          });
+        } else {
+          await tx.sale.update({
+            where: { id },
+            data: { status: "VOID" },
+          });
+        }
       });
 
       await logAudit({
@@ -289,13 +415,23 @@ export async function saleRoutes(fastify: FastifyInstance) {
   fastify.get("/:id/receipt", { preHandler: requirePermission("sales:read") }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const sale = await prisma.sale.findUnique({
+    let sale = await prisma.sale.findUnique({
       where: { id },
       include: {
         items: { include: { product: true } },
         payments: true,
       },
     });
+
+    if (!sale) {
+      sale = await nontaxablePrisma.sale.findUnique({
+        where: { id },
+        include: {
+          items: { include: { product: true } },
+          payments: true,
+        },
+      });
+    }
 
     if (!sale || sale.tenantId !== request.user!.tenantId) {
       return reply.status(404).send({ error: "Invoice not found" });

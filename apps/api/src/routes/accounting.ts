@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import prisma from "../utils/prisma";
+import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";
 
@@ -7,9 +7,12 @@ export async function accountingRoutes(fastify: FastifyInstance) {
   // Financial Dashboard aggregates
   fastify.get("/dashboard", { preHandler: requirePermission("accounting:read") }, async (request) => {
     const tenantId = request.user!.tenantId;
+    const { nontaxable } = request.query as { nontaxable?: string };
+    const useNontaxable = nontaxable === "true";
+    const dbSalesClient = useNontaxable ? nontaxablePrisma : prisma;
 
     // Fetch active sales, expenses, products for asset value
-    const sales = await prisma.sale.findMany({
+    const sales = await dbSalesClient.sale.findMany({
       where: { tenantId, status: "COMPLETED" },
       include: { items: { include: { product: true } } },
     });
@@ -46,7 +49,7 @@ export async function accountingRoutes(fastify: FastifyInstance) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const pastMonthSales = await prisma.sale.findMany({
+    const pastMonthSales = await dbSalesClient.sale.findMany({
       where: {
         tenantId,
         status: "COMPLETED",

@@ -186,10 +186,10 @@ async function main() {
 
   const superadmin = await prisma.user.create({
     data: {
-      email: "superadmin@easypos.com",
+      email: "chestersigua@easypos.com",
       passwordHash: passwordHash,
-      firstName: "Alex",
-      lastName: "Super",
+      firstName: "Chester",
+      lastName: "Sigua",
       roleId: roleSuperAdmin.id,
       tenantId: tenant.id,
       status: "ACTIVE",

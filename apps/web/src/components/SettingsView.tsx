@@ -35,6 +35,11 @@ export function SettingsView() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [newUserData, setNewUserData] = useState({ email: "", password: "", firstName: "", lastName: "", roleId: "", status: "ACTIVE" });
 
+  // Store list management
+  const [storesList, setStoresList] = useState<any[]>([]);
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [newStoreData, setNewStoreData] = useState({ name: "", address: "" });
+
   // MFA setup states
   const [mfaSecret, setMfaSecret] = useState("");
   const [mfaQrUrl, setMfaQrUrl] = useState("");
@@ -52,14 +57,16 @@ export function SettingsView() {
   const loadData = async () => {
     try {
       if (user?.role === "SUPERADMIN" || user?.role === "ADMIN") {
-        const [settingsRes, rolesRes, usersRes] = await Promise.all([
+        const [settingsRes, rolesRes, usersRes, storesRes] = await Promise.all([
           api.get("/system/settings"),
           api.get("/auth/roles"),
           api.get("/auth/users"),
+          api.get("/stores").catch(() => ({ data: [] })),
         ]);
         setSettings(settingsRes.data);
         setRoles(rolesRes.data);
         setUsers(usersRes.data);
+        setStoresList(storesRes.data);
 
         // Load SaaS details
         const plan = settingsRes.data.SAAS_PLAN || "ENTERPRISE";
@@ -197,6 +204,18 @@ export function SettingsView() {
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.error || "Failed to delete user");
+    }
+  };
+
+  const handleStoreCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post("/stores", newStoreData);
+      setShowStoreModal(false);
+      setNewStoreData({ name: "", address: "" });
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to create store location");
     }
   };
 
@@ -542,6 +561,51 @@ export function SettingsView() {
             </div>
           </div>
         )}
+
+        {/* Store Locations Registry (Admins only) */}
+        {(user?.role === "SUPERADMIN" || user?.role === "ADMIN") && (
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold tracking-tight flex items-center gap-2">
+                <Smartphone className="h-5 w-5 text-sky-500" /> Store Locations Registry
+              </h2>
+              <button
+                onClick={() => setShowStoreModal(true)}
+                className="flex items-center gap-1 rounded bg-sky-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-600"
+              >
+                <Plus className="h-3 w-3" /> Add Location
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-400 dark:border-slate-800">
+                    <th className="pb-2">Branch / Store Name</th>
+                    <th className="pb-2">Address</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                  {storesList.map((st) => (
+                    <tr key={st.id}>
+                      <td className="py-2.5 font-semibold text-slate-900 dark:text-slate-100">
+                        🏢 {st.name}
+                      </td>
+                      <td className="py-2.5 text-slate-500">{st.address || "No address provided"}</td>
+                    </tr>
+                  ))}
+                  {storesList.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="py-2.5 text-center text-slate-400">
+                        No store locations registered yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Multi-Factor Authentication (All users) */}
@@ -700,6 +764,55 @@ export function SettingsView() {
                 className="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-600"
               >
                 Create Account
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Store Create Modal */}
+      {showStoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <form
+            onSubmit={handleStoreCreate}
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4"
+          >
+            <h3 className="text-lg font-bold">Add Store Location</h3>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400">Store Name *</label>
+              <input
+                type="text"
+                required
+                value={newStoreData.name}
+                onChange={(e) => setNewStoreData({ ...newStoreData, name: e.target.value })}
+                className="w-full rounded-lg border border-slate-200 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-950"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400">Address / Location Details</label>
+              <input
+                type="text"
+                value={newStoreData.address}
+                onChange={(e) => setNewStoreData({ ...newStoreData, address: e.target.value })}
+                className="w-full rounded-lg border border-slate-200 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-950"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowStoreModal(false)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 dark:border-slate-800"
+              >
+                Close
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-600"
+              >
+                Create Location
               </button>
             </div>
           </form>

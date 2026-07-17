@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { CustomerSchema } from "@easypos/shared";
-import prisma from "../utils/prisma";
+import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";
 
@@ -64,6 +64,19 @@ export async function customerRoutes(fastify: FastifyInstance) {
       },
     });
 
+    try {
+      await nontaxablePrisma.customer.create({
+        data: {
+          ...data,
+          id: cid,
+          birthday: data.birthday ? new Date(data.birthday) : null,
+          tenantId: request.user!.tenantId,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to sync customer creation to nontaxable db:", err);
+    }
+
     await logAudit({
       userId: request.user!.id,
       action: "CREATE_CUSTOMER",
@@ -99,6 +112,18 @@ export async function customerRoutes(fastify: FastifyInstance) {
       },
     });
 
+    try {
+      await nontaxablePrisma.customer.update({
+        where: { id },
+        data: {
+          ...data,
+          birthday: data.birthday ? new Date(data.birthday) : null,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to sync customer update to nontaxable db:", err);
+    }
+
     await logAudit({
       userId: request.user!.id,
       action: "UPDATE_CUSTOMER",
@@ -122,6 +147,12 @@ export async function customerRoutes(fastify: FastifyInstance) {
     }
 
     await prisma.customer.delete({ where: { id } });
+
+    try {
+      await nontaxablePrisma.customer.delete({ where: { id } });
+    } catch (err) {
+      console.error("Failed to sync customer deletion to nontaxable db:", err);
+    }
 
     await logAudit({
       userId: request.user!.id,

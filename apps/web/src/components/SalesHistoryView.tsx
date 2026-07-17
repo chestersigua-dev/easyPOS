@@ -30,15 +30,20 @@ export function SalesHistoryView() {
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [voiding, setVoiding] = useState(false);
 
+  const [showingNontaxable, setShowingNontaxable] = useState(false);
+
   const loadSales = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/sales");
+      const res = await api.get("/sales", {
+        params: { nontaxable: showingNontaxable ? "true" : "false" }
+      });
       setSales(res.data);
       // Auto-update selected sale if it changes (e.g. voided)
       if (selectedSale) {
         const updated = res.data.find((s: any) => s.id === selectedSale.id);
         if (updated) setSelectedSale(updated);
+        else setSelectedSale(null);
       }
     } catch (err) {
       console.error("Failed to load sales history:", err);
@@ -49,7 +54,7 @@ export function SalesHistoryView() {
 
   useEffect(() => {
     loadSales();
-  }, []);
+  }, [showingNontaxable]);
 
   // Filter sales based on inputs
   const filteredSales = sales.filter((s) => {
@@ -99,9 +104,29 @@ export function SalesHistoryView() {
       {/* Left List Pane */}
       <div className="md:col-span-2 space-y-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Sales Invoice Registry</h1>
-            <p className="text-xs text-slate-500">Comprehensive transaction registry and BIR compliant log tracking.</p>
+          <div className="flex items-center gap-2 select-none">
+            <span
+              onDoubleClick={() => {
+                setShowingNontaxable(!showingNontaxable);
+                setSelectedSale(null);
+              }}
+              title="Double-click to toggle taxable/non-taxable registry"
+              className="cursor-pointer"
+            >
+              <FileText
+                className={`h-6 w-6 transition-colors ${showingNontaxable ? "text-emerald-500 hover:text-emerald-600" : "text-slate-400 hover:text-slate-600"}`}
+              />
+            </span>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">
+                {showingNontaxable ? "Non-Taxable Sales Invoice Registry" : "Sales Invoice Registry"}
+              </h1>
+              <p className="text-xs text-slate-505">
+                {showingNontaxable 
+                  ? "Bury/hidden log tracking for non-taxable sales." 
+                  : "Comprehensive transaction registry and BIR compliant log tracking."}
+              </p>
+            </div>
           </div>
           <button
             onClick={loadSales}

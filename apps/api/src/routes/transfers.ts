@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import prisma from "../utils/prisma";
+import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";
 
@@ -117,6 +117,34 @@ export async function transferRoutes(fastify: FastifyInstance) {
             createdBy: request.user!.id,
           },
         });
+
+        // Sync transfer changes to nontaxable db
+        try {
+          await nontaxablePrisma.storeInventory.update({
+            where: { productId_storeId: { productId, storeId: sourceStoreId } },
+            data: { quantity: { decrement: quantity } },
+          });
+
+          await nontaxablePrisma.storeInventory.upsert({
+            where: { productId_storeId: { productId, storeId: targetStoreId } },
+            create: { productId, storeId: targetStoreId, quantity },
+            update: { quantity: { increment: quantity } },
+          });
+
+          await nontaxablePrisma.stockTransfer.create({
+            data: {
+              id: newTransfer.id,
+              sourceStoreId,
+              targetStoreId,
+              productId,
+              quantity,
+              createdBy: request.user!.email,
+              createdAt: newTransfer.createdAt,
+            },
+          });
+        } catch (err) {
+          console.error("Failed to sync stock transfer to nontaxable db:", err);
+        }
 
         return newTransfer;
       });

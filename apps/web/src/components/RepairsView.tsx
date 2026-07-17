@@ -86,6 +86,7 @@ export function RepairsView() {
   const [tickets, setTickets] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [technicians, setTechnicians] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -112,14 +113,16 @@ export function RepairsView() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [ticketRes, custRes, userRes] = await Promise.all([
+      const [ticketRes, custRes, userRes, storeRes] = await Promise.all([
         api.get(`/repairs?status=${statusFilter}`),
         api.get("/customers"),
         api.get("/auth/users"),
+        api.get("/stores").catch(() => ({ data: [] })),
       ]);
       setTickets(ticketRes.data);
       setCustomers(custRes.data);
       setTechnicians(userRes.data.filter((u: any) => u.role === "REPAIRS" || u.role === "ADMIN" || u.role === "SUPERADMIN"));
+      setStores(storeRes.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -148,6 +151,7 @@ export function RepairsView() {
       customerSignature: "",
       technicianSignature: "",
       expirationDate: "",
+      storeId: stores[0]?.id || "",
     });
     setShowModal(true);
   };
@@ -157,6 +161,7 @@ export function RepairsView() {
     setFormData({
       ...t,
       expirationDate: t.expirationDate ? t.expirationDate.slice(0, 10) : "",
+      storeId: t.storeId || stores[0]?.id || "",
     });
     setShowModal(true);
   };
@@ -272,6 +277,9 @@ export function RepairsView() {
                 <td className="p-4">
                   <div className="font-bold text-slate-950 dark:text-slate-100">{t.ticketNo}</div>
                   <div className="text-[10px] text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</div>
+                  {t.store && (
+                    <div className="text-[9px] text-sky-500 font-bold mt-0.5">🏢 {t.store.name}</div>
+                  )}
                 </td>
                 <td className="p-4">
                   <div className="font-semibold text-slate-900 dark:text-slate-100">
@@ -340,7 +348,7 @@ export function RepairsView() {
           >
             <h3 className="text-lg font-bold">{editingTicket ? "Update Repair Ticket" : "Open Repair Ticket"}</h3>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-[10px] font-bold text-slate-400">Customer *</label>
                 <select
@@ -369,6 +377,23 @@ export function RepairsView() {
                   {technicians.map((tech) => (
                     <option key={tech.id} value={tech.id}>
                       {tech.firstName} {tech.lastName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400">Store Branch *</label>
+                <select
+                  required
+                  value={formData.storeId || ""}
+                  onChange={(e) => setFormData({ ...formData, storeId: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <option value="">-- Select Store --</option>
+                  {stores.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      🏢 {st.name}
                     </option>
                   ))}
                 </select>

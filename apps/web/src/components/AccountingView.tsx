@@ -7,6 +7,7 @@ export function AccountingView() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showNontaxableReport, setShowNontaxableReport] = useState(false);
 
   // Expense forms
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -16,7 +17,9 @@ export function AccountingView() {
     setLoading(true);
     try {
       const [statsRes, expRes, logRes] = await Promise.all([
-        api.get("/accounting/dashboard"),
+        api.get("/accounting/dashboard", {
+          params: { nontaxable: showNontaxableReport ? "true" : "false" }
+        }),
         api.get("/accounting/expenses"),
         api.get("/accounting/logs").catch(() => ({ data: [] })), // Gracefully fall back if no permission
       ]);
@@ -32,7 +35,7 @@ export function AccountingView() {
 
   useEffect(() => {
     loadAccountingData();
-  }, []);
+  }, [showNontaxableReport]);
 
   const handleExpenseSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,11 +64,37 @@ export function AccountingView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Accounting & Auditing</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Profit and Loss calculations, expense registers, and security audit trail logs.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Accounting & Auditing</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Profit and Loss calculations, expense registers, and security audit trail logs.
+          </p>
+        </div>
+
+        {/* Toggle Report Type */}
+        <div className="flex rounded-lg border border-slate-200 p-1 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold self-start sm:self-auto shrink-0 shadow-sm select-none">
+          <button
+            onClick={() => setShowNontaxableReport(false)}
+            className={`px-3 py-1.5 rounded-md transition-all ${
+              !showNontaxableReport
+                ? "bg-sky-500 text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-950 dark:hover:text-slate-200"
+            }`}
+          >
+            Taxable (VAT) Sales Report
+          </button>
+          <button
+            onClick={() => setShowNontaxableReport(true)}
+            className={`px-3 py-1.5 rounded-md transition-all ${
+              showNontaxableReport
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-950 dark:hover:text-slate-200"
+            }`}
+          >
+            Non-Taxable Sales Report
+          </button>
+        </div>
       </div>
 
       {/* Financial P&L Cards */}

@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import prisma from "../utils/prisma";
+import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { comparePassword, hashPassword } from "@easypos/auth";
 import { verifyMfaToken } from "../utils/totp";
@@ -208,6 +208,45 @@ export async function systemRoutes(fastify: FastifyInstance) {
         }
       });
 
+      // Clean up equivalent tables in nontaxable.db
+      try {
+        if (options.dataReset) {
+          await nontaxablePrisma.payment.deleteMany();
+          await nontaxablePrisma.saleItem.deleteMany();
+          await nontaxablePrisma.sale.deleteMany();
+          await nontaxablePrisma.repairStatusHistory.deleteMany();
+          await nontaxablePrisma.repairTicket.deleteMany();
+          await nontaxablePrisma.stockMovement.deleteMany();
+          await nontaxablePrisma.expense.deleteMany();
+        }
+
+        if (options.productReset === "DELETE_ALL") {
+          await nontaxablePrisma.product.deleteMany();
+        }
+
+        if (options.customerReset === "DELETE_ALL") {
+          await nontaxablePrisma.customer.deleteMany();
+        }
+
+        if (options.supplierReset) {
+          await nontaxablePrisma.supplier.deleteMany();
+        }
+
+        if (options.userReset === "REMOVE_ALL_EXCEPT_SUPERADMIN") {
+          await nontaxablePrisma.user.deleteMany({
+            where: { id: { not: superAdmin.id } },
+          });
+        }
+
+        if (options.settingsReset) {
+          await nontaxablePrisma.setting.deleteMany({
+            where: { key: { notIn: ["APP_NAME", "CURRENCY", "TIMEZONE"] } },
+          });
+        }
+      } catch (err) {
+        console.error("Failed to clean up nontaxable.db during reset:", err);
+      }
+
       // 7. Write immutable audit record of reset
       await logAudit({
         userId: superAdmin.id,
@@ -258,6 +297,37 @@ export async function systemRoutes(fastify: FastifyInstance) {
         // Delete users EXCEPT current SuperAdmin
         await tx.user.deleteMany({ where: { id: { not: superAdmin.id } } });
       });
+
+      try {
+        await nontaxablePrisma.setting.deleteMany();
+        await nontaxablePrisma.expense.deleteMany();
+        await nontaxablePrisma.payment.deleteMany();
+        await nontaxablePrisma.saleItem.deleteMany();
+        await nontaxablePrisma.sale.deleteMany();
+        await nontaxablePrisma.repairStatusHistory.deleteMany();
+        await nontaxablePrisma.repairTicket.deleteMany();
+        await nontaxablePrisma.stockMovement.deleteMany();
+        await nontaxablePrisma.product.deleteMany();
+        await nontaxablePrisma.customer.deleteMany();
+        await nontaxablePrisma.supplier.deleteMany();
+        await nontaxablePrisma.session.deleteMany();
+        await nontaxablePrisma.refreshToken.deleteMany();
+        await nontaxablePrisma.user.deleteMany({ where: { id: { not: superAdmin.id } } });
+
+        const defaultSettings = [
+          { key: "APP_NAME", value: "EasyPOS Store" },
+          { key: "TAX_RATE", value: "12" },
+          { key: "CURRENCY", value: "PHP" },
+          { key: "TIMEZONE", value: "Asia/Manila" },
+        ];
+        for (const s of defaultSettings) {
+          await nontaxablePrisma.setting.create({
+            data: { key: s.key, value: s.value, tenantId: request.user!.tenantId },
+          });
+        }
+      } catch (err) {
+        console.error("Failed to factory reset nontaxable.db:", err);
+      }
 
       // 3. Setup default settings
       const defaultSettings = [

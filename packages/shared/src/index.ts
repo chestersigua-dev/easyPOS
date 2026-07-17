@@ -64,6 +64,7 @@ export const ProductSchema = z.object({
   serialNumbers: z.string().optional().nullable(), // JSON string array
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
   taxable: z.boolean().default(true),
+  storeId: z.string().optional().nullable(),
 });
 export type ProductInput = z.infer<typeof ProductSchema>;
 
@@ -128,6 +129,7 @@ export const RepairSchema = z.object({
   customerSignature: z.string().optional().nullable(), // base64
   technicianSignature: z.string().optional().nullable(), // base64
   expirationDate: z.string().optional().nullable(),
+  storeId: z.string().optional().nullable(),
 });
 export type RepairInput = z.infer<typeof RepairSchema>;
 

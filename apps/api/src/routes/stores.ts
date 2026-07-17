@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import prisma from "../utils/prisma";
+import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 
 export async function storeRoutes(fastify: FastifyInstance) {
@@ -29,6 +29,19 @@ export async function storeRoutes(fastify: FastifyInstance) {
             tenantId,
           },
         });
+
+        try {
+          await nontaxablePrisma.store.create({
+            data: {
+              id: newStore.id,
+              name: name.trim(),
+              address: address?.trim() || null,
+              tenantId,
+            },
+          });
+        } catch (err) {
+          console.error("Failed to sync store creation to nontaxable db:", err);
+        }
 
         // Initialize StoreInventory for all existing products in this tenant with 0 stock
         const products = await tx.product.findMany({

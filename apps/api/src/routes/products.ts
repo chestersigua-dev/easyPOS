@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { ProductSchema } from "@easypos/shared";
-import prisma from "../utils/prisma";
+import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";
 import { parseExcelProducts, exportToExcel } from "../utils/excel";
@@ -21,6 +21,15 @@ export async function productRoutes(fastify: FastifyInstance) {
         { barcode: { contains: search } },
         { brand: { contains: search } },
         { category: { contains: search } },
+        {
+          storeInventories: {
+            some: {
+              store: {
+                name: { contains: search }
+              }
+            }
+          }
+        }
       ];
     }
 
@@ -58,10 +67,12 @@ export async function productRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: "Product SKU already exists in store" });
     }
 
+    const { storeId, ...productData } = data;
+
     const newProduct = await prisma.$transaction(async (tx) => {
       const prod = await tx.product.create({
         data: {
-          ...data,
+          ...productData,
           tenantId: request.user!.tenantId,
         },
       });
@@ -72,19 +83,48 @@ export async function productRoutes(fastify: FastifyInstance) {
         orderBy: { createdAt: "asc" },
       });
 
-      // Place initial product stock in the first store as default, others get 0
+      // Place initial product stock in the selected store or first store as default, others get 0
+      const targetStoreId = storeId || (stores[0] ? stores[0].id : null);
       for (let i = 0; i < stores.length; i++) {
         await tx.storeInventory.create({
           data: {
             productId: prod.id,
             storeId: stores[i].id,
-            quantity: i === 0 ? prod.quantity : 0,
+            quantity: stores[i].id === targetStoreId ? prod.quantity : 0,
           },
         });
       }
 
       return prod;
     });
+
+    try {
+      await nontaxablePrisma.product.create({
+        data: {
+          ...productData,
+          id: newProduct.id,
+          tenantId: request.user!.tenantId,
+        },
+      });
+
+      // Initialize StoreInventory records for nontaxable db
+      const stores = await nontaxablePrisma.store.findMany({
+        where: { tenantId: request.user!.tenantId },
+        orderBy: { createdAt: "asc" },
+      });
+      const targetStoreId = storeId || (stores[0] ? stores[0].id : null);
+      for (let i = 0; i < stores.length; i++) {
+        await nontaxablePrisma.storeInventory.create({
+          data: {
+            productId: newProduct.id,
+            storeId: stores[i].id,
+            quantity: stores[i].id === targetStoreId ? newProduct.quantity : 0,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("Failed to sync product creation to nontaxable db:", err);
+    }
 
     // Create initial stock movement log if quantity > 0
     if (newProduct.quantity > 0) {
@@ -130,28 +170,51 @@ export async function productRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: "Product not found" });
     }
 
+    const { storeId, ...productData } = data;
+
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: {
-        ...data,
+        ...productData,
       },
     });
+
+    try {
+      await nontaxablePrisma.product.update({
+        where: { id },
+        data: {
+          ...productData,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to sync product update to nontaxable db:", err);
+    }
 
     // Log stock changes if direct edit occurred
     if (product.quantity !== updatedProduct.quantity) {
       const diff = updatedProduct.quantity - product.quantity;
       
-      // Update store inventory for default branch to keep in sync
-      const firstStore = await prisma.store.findFirst({
+      // Update store inventory for selected branch to keep in sync
+      const targetStoreId = storeId || (await prisma.store.findFirst({
         where: { tenantId: request.user!.tenantId },
         orderBy: { createdAt: "asc" },
-      });
-      if (firstStore) {
+      }))?.id;
+
+      if (targetStoreId) {
         await prisma.storeInventory.upsert({
-          where: { productId_storeId: { productId: id, storeId: firstStore.id } },
-          create: { productId: id, storeId: firstStore.id, quantity: diff > 0 ? diff : 0 },
+          where: { productId_storeId: { productId: id, storeId: targetStoreId } },
+          create: { productId: id, storeId: targetStoreId, quantity: diff > 0 ? diff : 0 },
           update: { quantity: { increment: diff } },
         });
+
+        // Sync to nontaxable storeInventory
+        try {
+          await nontaxablePrisma.storeInventory.upsert({
+            where: { productId_storeId: { productId: id, storeId: targetStoreId } },
+            create: { productId: id, storeId: targetStoreId, quantity: diff > 0 ? diff : 0 },
+            update: { quantity: { increment: diff } },
+          });
+        } catch (err) {}
       }
 
       await prisma.stockMovement.create({
@@ -191,6 +254,12 @@ export async function productRoutes(fastify: FastifyInstance) {
 
     await prisma.product.delete({ where: { id } });
 
+    try {
+      await nontaxablePrisma.product.delete({ where: { id } });
+    } catch (err) {
+      console.error("Failed to sync product deletion to nontaxable db:", err);
+    }
+
     await logAudit({
       userId: request.user!.id,
       action: "DELETE_PRODUCT",
@@ -205,11 +274,12 @@ export async function productRoutes(fastify: FastifyInstance) {
 
   // Adjust stock inventory (Approved adjustment)
   fastify.post("/adjust", { preHandler: requirePermission("accounting:adjust") }, async (request, reply) => {
-    const { productId, type, quantity, reason } = request.body as {
+    const { productId, type, quantity, reason, storeId } = request.body as {
       productId: string;
       type: "IN" | "OUT";
       quantity: number;
       reason: string;
+      storeId?: string;
     };
 
     if (!productId || !type || !quantity || quantity <= 0) {
@@ -232,6 +302,37 @@ export async function productRoutes(fastify: FastifyInstance) {
       where: { id: productId },
       data: { quantity: newQty },
     });
+
+    try {
+      await nontaxablePrisma.product.update({
+        where: { id: productId },
+        data: { quantity: newQty },
+      });
+    } catch (err) {
+      console.error("Failed to sync stock adjustment to nontaxable db:", err);
+    }
+
+    const targetStoreId = storeId || (await prisma.store.findFirst({
+      where: { tenantId: request.user!.tenantId },
+      orderBy: { createdAt: "asc" },
+    }))?.id;
+
+    if (targetStoreId) {
+      await prisma.storeInventory.upsert({
+        where: { productId_storeId: { productId, storeId: targetStoreId } },
+        create: { productId, storeId: targetStoreId, quantity: type === "IN" ? quantity : 0 },
+        update: { quantity: { [type === "IN" ? "increment" : "decrement"]: quantity } },
+      });
+
+      // Sync to nontaxable storeInventory
+      try {
+        await nontaxablePrisma.storeInventory.upsert({
+          where: { productId_storeId: { productId, storeId: targetStoreId } },
+          create: { productId, storeId: targetStoreId, quantity: type === "IN" ? quantity : 0 },
+          update: { quantity: { [type === "IN" ? "increment" : "decrement"]: quantity } },
+        });
+      } catch (err) {}
+    }
 
     await prisma.stockMovement.create({
       data: {
@@ -326,6 +427,17 @@ export async function productRoutes(fastify: FastifyInstance) {
             wholesalePrice: row.wholesalePrice,
           },
         });
+        try {
+          await nontaxablePrisma.product.update({
+            where: { id: existing.id },
+            data: {
+              quantity: row.quantity,
+              purchaseCost: row.purchaseCost,
+              sellingPrice: row.sellingPrice,
+              wholesalePrice: row.wholesalePrice,
+            },
+          });
+        } catch (err) {}
         await prisma.stockMovement.create({
           data: {
             productId: existing.id,
@@ -345,6 +457,15 @@ export async function productRoutes(fastify: FastifyInstance) {
             tenantId: request.user!.tenantId,
           },
         });
+        try {
+          await nontaxablePrisma.product.create({
+            data: {
+              ...row,
+              id: newP.id,
+              tenantId: request.user!.tenantId,
+            },
+          });
+        } catch (err) {}
         if (newP.quantity > 0) {
           await prisma.stockMovement.create({
             data: {

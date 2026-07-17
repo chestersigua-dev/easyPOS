@@ -23,13 +23,16 @@ async function generateTicketNumber(tenantId: string): Promise<string> {
 export async function repairRoutes(fastify: FastifyInstance) {
   // Get all repair tickets
   fastify.get("/", { preHandler: requirePermission("repairs:read") }, async (request) => {
-    const { status } = request.query as { status?: string };
+    const { status, storeId } = request.query as { status?: string; storeId?: string };
     const whereClause: any = {
       tenantId: request.user!.tenantId,
     };
 
     if (status) {
       whereClause.status = status;
+    }
+    if (storeId) {
+      whereClause.storeId = storeId;
     }
 
     return prisma.repairTicket.findMany({
@@ -38,6 +41,7 @@ export async function repairRoutes(fastify: FastifyInstance) {
         customer: true,
         technician: true,
         statusHistory: true,
+        store: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -71,6 +75,7 @@ export async function repairRoutes(fastify: FastifyInstance) {
         technicianSignature: data.technicianSignature || null,
         expirationDate: data.expirationDate ? new Date(data.expirationDate) : null,
         tenantId,
+        storeId: data.storeId || null,
         statusHistory: {
           create: {
             status: "PENDING",
@@ -82,6 +87,7 @@ export async function repairRoutes(fastify: FastifyInstance) {
       include: {
         customer: true,
         technician: true,
+        store: true,
       },
     });
 
@@ -133,11 +139,13 @@ export async function repairRoutes(fastify: FastifyInstance) {
         customerSignature: data.customerSignature || null,
         technicianSignature: data.technicianSignature || null,
         expirationDate: data.expirationDate ? new Date(data.expirationDate) : null,
+        storeId: data.storeId || null,
       },
       include: {
         customer: true,
         technician: true,
         statusHistory: true,
+        store: true,
       },
     });
 
