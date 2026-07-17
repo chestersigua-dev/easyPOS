@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: easypos-api
+    runtime: node
+    rootDir: apps/api
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # Set this in Render dashboard → Environment
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8085
