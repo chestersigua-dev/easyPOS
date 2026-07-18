@@ -93,7 +93,7 @@ async function main() {
 
   // Run seed script
   console.log("\nSeeding default database...");
-  runCommand("npx prisma db seed");
+  runCommand("npx prisma db seed", path.resolve(rootDir, "packages", "database"));
 
   console.log("\n=== EasyPOS Setup Completed Successfully! ===");
 }

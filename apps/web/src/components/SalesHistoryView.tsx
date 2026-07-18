@@ -14,7 +14,8 @@ import {
   AlertTriangle, 
   Sparkles, 
   Award,
-  Filter
+  Filter,
+  Printer
 } from "lucide-react";
 import { api } from "../services/api";
 
@@ -29,6 +30,10 @@ export function SalesHistoryView() {
 
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [voiding, setVoiding] = useState(false);
+
+  // Print options modal
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printInvoiceId, setPrintInvoiceId] = useState<string | null>(null);
 
   const [showingNontaxable, setShowingNontaxable] = useState(false);
 
@@ -85,14 +90,34 @@ export function SalesHistoryView() {
   };
 
   // Printable receipt blob download trigger (with Auth header)
-  const viewReceiptPdf = async (saleId: string) => {
+  const viewReceiptPdf = async (saleId: string, type: 'direct' | 'pdf') => {
     try {
       const response = await api.get(`/sales/${saleId}/receipt`, {
         responseType: "blob",
       });
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      if (type === 'direct') {
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "0";
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            window.URL.revokeObjectURL(url);
+          }, 1000);
+        };
+      } else {
+        window.open(url, "_blank");
+      }
     } catch (err) {
       console.error("Failed to fetch receipt PDF:", err);
       alert("Failed to load receipt PDF.");
@@ -268,7 +293,10 @@ export function SalesHistoryView() {
 
               <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center relative z-10">
                 <button
-                  onClick={() => viewReceiptPdf(selectedSale.id)}
+                  onClick={() => {
+                    setPrintInvoiceId(selectedSale.id);
+                    setShowPrintModal(true);
+                  }}
                   className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-sky-600 transition-colors"
                 >
                   <FileText className="h-3.5 w-3.5" /> View/Print Invoice
@@ -426,6 +454,46 @@ export function SalesHistoryView() {
           </div>
         )}
       </div>
+
+      {showPrintModal && printInvoiceId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Printer className="h-5 w-5 text-sky-500" />
+              Print Receipt Options
+            </h3>
+            <p className="text-xs text-slate-400 mt-2">
+              Choose how you would like to output the invoice receipt:
+            </p>
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  viewReceiptPdf(printInvoiceId, 'direct');
+                  setShowPrintModal(false);
+                }}
+                className="flex items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-xs font-semibold text-white shadow-sm hover:bg-sky-600 transition-colors"
+              >
+                <Printer className="h-4 w-4" /> Print to Default Printer
+              </button>
+              <button
+                onClick={() => {
+                  viewReceiptPdf(printInvoiceId, 'pdf');
+                  setShowPrintModal(false);
+                }}
+                className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-850 dark:bg-slate-950/20 dark:text-slate-350 dark:hover:bg-slate-900 transition-colors"
+              >
+                <FileText className="h-4 w-4" /> Print to PDF / View
+              </button>
+              <button
+                onClick={() => setShowPrintModal(false)}
+                className="mt-2 text-center text-xs text-slate-450 hover:text-slate-600 dark:hover:text-slate-300 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
