@@ -9,6 +9,7 @@ interface UserProfile {
   mfaEnabled: boolean;
   profilePhoto?: string | null;
   enabledModules?: string[];
+  businessName?: string;
 }
 
 interface AuthState {

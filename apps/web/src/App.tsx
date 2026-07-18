@@ -20,10 +20,17 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  History
+  History,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  Globe,
+  Crown,
+  Palette
 } from "lucide-react";
 import { useAuthStore } from "./store/auth";
 import { api } from "./services/api";
+import { useToastStore } from "./store/toast";
 
 // Page Views
 import { DashboardView } from "./components/DashboardView";
@@ -36,6 +43,8 @@ import { AccountingView } from "./components/AccountingView";
 import { SettingsView } from "./components/SettingsView";
 import { ResetView } from "./components/ResetView";
 import { SalesHistoryView } from "./components/SalesHistoryView";
+import { BusinessesView } from "./components/BusinessesView";
+import { applyThemeConfig } from "./utils/theme";
 
 type Tab =
   | "DASHBOARD"
@@ -47,16 +56,35 @@ type Tab =
   | "ACCOUNTING"
   | "SETTINGS"
   | "RESET"
-  | "SALES_HISTORY";
+  | "SALES_HISTORY"
+  | "BUSINESSES";
 
 export default function App() {
   const { user, accessToken, setAuth, logout } = useAuthStore();
+  const { toasts, removeToast, addToast } = useToastStore();
 
   // Navigation
-  const [activeTab, setActiveTab] = useState<Tab>("DASHBOARD");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const sessionUser = useAuthStore.getState().user;
+    if (sessionUser?.role === "SALES") return "POS";
+    if (sessionUser?.role === "REPAIRS") return "REPAIRS";
+    return "DASHBOARD";
+  });
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    return (localStorage.getItem("theme") as "light" | "dark") || "dark";
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Sync theme changes to document class
+  useEffect(() => {
+    localStorage.setItem("theme", theme);
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
 
   // Auth form states
   const [email, setEmail] = useState("");
@@ -68,14 +96,27 @@ export default function App() {
   const [loggingIn, setLoggingIn] = useState(false);
 
   // App Settings Cache (Brand Name)
-  const [appName, setAppName] = useState("EasyPOS Hub");
+  const [settingsAppName, setSettingsAppName] = useState("EasyPOS");
+
+  // Compute display name: SuperAdmin always sees "EasyPOS", others see business name
+  const displayAppName = user?.role === "SUPERADMIN"
+    ? "EasyPOS"
+    : user?.businessName || settingsAppName || "EasyPOS";
 
   // Load app name from settings
   const fetchSettings = async () => {
     try {
       const res = await api.get("/system/settings");
       if (res.data?.APP_NAME) {
-        setAppName(res.data.APP_NAME);
+        setSettingsAppName(res.data.APP_NAME);
+      }
+      if (res.data?.THEME_CONFIG) {
+        try {
+          const config = JSON.parse(res.data.THEME_CONFIG);
+          applyThemeConfig(config);
+        } catch (e) {
+          console.error("Failed to parse theme config:", e);
+        }
       }
     } catch (err) {
       console.log("Failed to load business brand settings");
@@ -107,7 +148,12 @@ export default function App() {
 
   // Ensure active tab remains within enabled modules if modified dynamically
   useEffect(() => {
-    if (user && user.enabledModules && !user.enabledModules.includes(activeTab)) {
+    if (
+      user &&
+      user.enabledModules &&
+      !["SETTINGS", "RESET", "SALES_HISTORY", "BUSINESSES", "THEME"].includes(activeTab) &&
+      !user.enabledModules.includes(activeTab)
+    ) {
       const firstEnabled = navigationItems.find((item) => user.enabledModules!.includes(item.id));
       if (firstEnabled) {
         setActiveTab(firstEnabled.id as Tab);
@@ -126,11 +172,15 @@ export default function App() {
       if (res.data?.mfaRequired) {
         setMfaRequired(true);
         setMfaUserId(res.data.userId);
+        addToast("MFA verification code required", "info");
       } else {
         setAuth(res.data.accessToken, res.data.user);
+        addToast(`Welcome back, ${res.data.user.firstName}!`, "success");
       }
     } catch (err: any) {
-      setAuthError(err.response?.data?.error || "Login credentials rejected.");
+      const errMsg = err.response?.data?.error || "Login credentials rejected.";
+      setAuthError(errMsg);
+      addToast(errMsg, "error");
     } finally {
       setLoggingIn(false);
     }
@@ -147,8 +197,11 @@ export default function App() {
       setMfaRequired(false);
       setMfaUserId("");
       setMfaCode("");
+      addToast(`Welcome back, ${res.data.user.firstName}!`, "success");
     } catch (err: any) {
-      setAuthError(err.response?.data?.error || "Invalid verification code.");
+      const errMsg = err.response?.data?.error || "Invalid verification code.";
+      setAuthError(errMsg);
+      addToast(errMsg, "error");
     } finally {
       setLoggingIn(false);
     }
@@ -161,22 +214,20 @@ export default function App() {
       console.error(err);
     } finally {
       logout();
+      addToast("Signed out successfully", "info");
     }
   };
 
   const toggleTheme = () => {
     const nextTheme = theme === "light" ? "dark" : "light";
     setTheme(nextTheme);
-    if (nextTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    addToast(nextTheme === "dark" ? "Dark mode activated" : "Light mode activated", "info");
   };
 
   // Define sidebar navigation tabs with RBAC controls
   const navigationItems = [
     { id: "DASHBOARD", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "ACCOUNTING"] },
+    { id: "BUSINESSES", label: "Business Subscriptions", icon: Globe, roles: ["SUPERADMIN"] },
     { id: "POS", label: "POS Screen", icon: ShoppingCart, roles: ["SUPERADMIN", "ADMIN", "SALES"] },
     { id: "SALES_HISTORY", label: "Sales History", icon: History, roles: ["SUPERADMIN", "ADMIN", "SALES", "ACCOUNTING"] },
     { id: "PRODUCTS", label: "Inventory", icon: Cpu, roles: ["SUPERADMIN", "ADMIN", "ACCOUNTING", "REPAIRS"] },
@@ -192,7 +243,9 @@ export default function App() {
     (item) =>
       user &&
       item.roles.includes(user.role) &&
-      (!user.enabledModules || user.enabledModules.includes(item.id))
+      (["SETTINGS", "RESET", "SALES_HISTORY", "BUSINESSES"].includes(item.id) ||
+        !user.enabledModules ||
+        user.enabledModules.includes(item.id))
   );
 
   // --- UNAUTHENTICATED SCREEN (LOGIN) ---
@@ -202,7 +255,7 @@ export default function App() {
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-slate-800 dark:bg-slate-900">
           <div className="text-center">
             <span className="text-4xl">💻</span>
-            <h2 className="mt-4 text-2xl font-bold tracking-tight">EasyPOS Hub Login</h2>
+            <h2 className="mt-4 text-2xl font-bold tracking-tight">EasyPOS Login</h2>
             <p className="mt-1.5 text-xs text-slate-400">
               Computer Parts Shop Enterprise Point of Sale
             </p>
@@ -320,30 +373,31 @@ export default function App() {
           sidebarCollapsed ? "md:w-20 w-64" : "w-64"
         } ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="space-y-6">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <span className="text-2xl shrink-0">💻</span>
-              {(!sidebarCollapsed || mobileMenuOpen) && (
-                <div className="transition-opacity duration-300">
-                  <h2 className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
-                    {appName}
-                  </h2>
-                  <span className="text-[10px] font-bold text-sky-500 uppercase tracking-widest block truncate">
-                    {user.role} CONTROL PANEL
-                  </span>
-                </div>
-              )}
-            </div>
+        {/* Sidebar Collapse Toggle Button (desktop only) */}
+        <button
+          onClick={() => {
+            setSidebarCollapsed(!sidebarCollapsed);
+            addToast(sidebarCollapsed ? "Sidebar expanded" : "Sidebar collapsed", "info");
+          }}
+          className="hidden md:flex absolute top-5 -right-3 z-50 h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900 text-slate-500 shadow-sm focus:outline-none"
+          title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {sidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+        </button>
 
-            {/* Sidebar Collapse Toggle Button (desktop only) */}
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="hidden md:flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900 text-slate-500 shadow-sm focus:outline-none"
-              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-            >
-              {sidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-            </button>
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 overflow-hidden min-w-0">
+            <span className="text-2xl shrink-0">💻</span>
+            {(!sidebarCollapsed || mobileMenuOpen) && (
+              <div className="transition-opacity duration-300 min-w-0">
+                <h2 className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
+                  {displayAppName}
+                </h2>
+                <span className="text-[10px] font-bold text-sky-500 uppercase tracking-widest block truncate">
+                  {user.role}
+                </span>
+              </div>
+            )}
           </div>
 
           <nav className="space-y-1.5">
@@ -414,6 +468,10 @@ export default function App() {
                 alt="Profile"
                 className="h-9 w-9 shrink-0 rounded-lg object-cover shadow-inner"
               />
+            ) : user.role === "SUPERADMIN" ? (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white font-bold shadow-inner" title="SuperAdmin">
+                <Crown className="h-4 w-4" />
+              </div>
             ) : (
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white font-bold text-xs uppercase shadow-inner">
                 {user.firstName[0]}
@@ -482,6 +540,7 @@ export default function App() {
           {activeTab === "SETTINGS" && <SettingsView />}
           {activeTab === "RESET" && <ResetView />}
           {activeTab === "SALES_HISTORY" && <SalesHistoryView />}
+          {activeTab === "BUSINESSES" && <BusinessesView />}
         </main>
 
         {/* Sticky Footer */}
@@ -499,6 +558,35 @@ export default function App() {
             </a>
           </span>
         </footer>
+      </div>
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-20 right-6 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto flex items-center justify-between gap-3 rounded-xl px-4 py-3 shadow-lg border backdrop-blur-md transition-all duration-300 ${
+              toast.type === "success"
+                ? "bg-emerald-50/95 border-emerald-200 text-emerald-800 dark:bg-emerald-950/95 dark:border-emerald-800 dark:text-emerald-200"
+                : toast.type === "error"
+                ? "bg-rose-50/95 border-rose-200 text-rose-800 dark:bg-rose-950/95 dark:border-rose-800 dark:text-rose-200"
+                : "bg-slate-50/95 border-slate-200 text-slate-800 dark:bg-slate-900/95 dark:border-slate-800 dark:text-slate-200"
+            }`}
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              {toast.type === "success" && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />}
+              {toast.type === "error" && <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />}
+              {toast.type === "info" && <Info className="h-4 w-4 shrink-0 text-sky-500" />}
+              <span>{toast.message}</span>
+            </div>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

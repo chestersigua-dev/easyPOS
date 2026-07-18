@@ -4,7 +4,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "DATABASE_URL=postgresql://build:build@localhost/build prisma generate --schema=../../packages/database/prisma/schema.prisma && tsc",
+    "build": "cross-env DATABASE_URL=postgresql://build:build@localhost/build prisma generate --schema=../../packages/database/prisma/schema.prisma && tsc",
     "start": "node dist/server.js"
   },
   "dependencies": {
@@ -31,6 +31,7 @@
     "@types/node": "^20.11.24",
     "@types/pdfkit": "^0.13.3",
     "@types/qrcode": "^1.5.5",
+    "cross-env": "^10.1.0",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"

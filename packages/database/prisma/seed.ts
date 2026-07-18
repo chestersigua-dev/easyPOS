@@ -1,5 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
+import * as path from "path";
+import * as fs from "fs";
+import * as dotenv from "dotenv";
+
+// Load .env relative to packages/database/prisma/seed.ts
+dotenv.config({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
+
+if (!process.env.DATABASE_URL) {
+  const dbFile = path.resolve(__dirname, "dev.db");
+  process.env.DATABASE_URL = `file:${dbFile}`;
+  console.log(`[seed] No DATABASE_URL set — defaulting to SQLite at ${dbFile}`);
+}
 
 const prisma = new PrismaClient();
 
@@ -605,6 +617,31 @@ async function main() {
 
   console.log("Seeded Repairs.");
   console.log("Seed completely successful!");
+
+  // Copy to nontaxable.db if using SQLite
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith("file:")) {
+    const mainDbFile = path.resolve(__dirname, "dev.db");
+    const nontaxableDbFile = path.resolve(__dirname, "nontaxable.db");
+    try {
+      if (fs.existsSync(nontaxableDbFile)) {
+        fs.unlinkSync(nontaxableDbFile); // Delete old file
+      }
+      fs.copyFileSync(mainDbFile, nontaxableDbFile);
+      console.log("[seed] Synced nontaxable.db with fresh dev.db seed data.");
+
+      const tempClient = new PrismaClient({
+        datasources: { db: { url: `file:${nontaxableDbFile}` } },
+      });
+      await tempClient.$connect();
+      await tempClient.payment.deleteMany();
+      await tempClient.saleItem.deleteMany();
+      await tempClient.sale.deleteMany();
+      await tempClient.$disconnect();
+      console.log("[seed] Cleaned transaction tables in nontaxable.db.");
+    } catch (e) {
+      console.error("[seed] Failed to sync nontaxable.db during seed:", e);
+    }
+  }
 }
 
 main()

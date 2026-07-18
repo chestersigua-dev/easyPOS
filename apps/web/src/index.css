@@ -4,14 +4,17 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
+    --background: var(--background-override, 210 40% 98%);
     --foreground: 222.2 84% 4.9%;
 
-    --card: 0 0% 100%;
+    --card: var(--card-override, 0 0% 100%);
     --card-foreground: 222.2 84% 4.9%;
 
-    --primary: 200.5 97.9% 41.2%; /* Sky-500 equivalent */
+    --primary: var(--primary-override, 200.5 97.9% 41.2%); /* Sky-500 equivalent */
     --primary-foreground: 210 40% 98%;
+
+    --primary-hover: var(--primary-hover-override, 200.5 97.9% 35%);
+    --primary-tint: var(--primary-tint-override, 200.5 97.9% 95%);
 
     --secondary: 222.2 47.4% 11.2%; /* Slate-900 equivalent */
     --secondary-foreground: 210 40% 98%;
@@ -33,14 +36,17 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: var(--background-dark-override, 222.2 84% 4.9%);
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 6%;
+    --card: var(--card-dark-override, 222.2 84% 6%);
     --card-foreground: 210 40% 98%;
 
-    --primary: 200.5 97.9% 41.2%;
+    --primary: var(--primary-override, 200.5 97.9% 41.2%);
     --primary-foreground: 210 40% 98%;
+
+    --primary-hover: var(--primary-hover-override, 200.5 97.9% 50%);
+    --primary-tint: var(--primary-tint-override, 200.5 97.9% 10%);
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;

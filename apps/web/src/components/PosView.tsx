@@ -3,8 +3,10 @@ import { Search, ShoppingCart, Trash2, Tag, UserPlus, CreditCard, Gift, Pause, P
 import confetti from "canvas-confetti";
 import { api } from "../services/api";
 import { useCartStore } from "../store/cart";
+import { useToastStore } from "../store/toast";
 
 export function PosView() {
+  const addToast = useToastStore((state) => state.addToast);
   const {
     items,
     discount,
@@ -191,8 +193,9 @@ export function PosView() {
       setCustomer(res.data);
       setShowCustModal(false);
       setNewCust({ firstName: "", lastName: "", mobile: "", email: "" });
+      addToast("Customer registered successfully!", "success");
     } catch (err: any) {
-      alert(err.response?.data?.error || "Failed to create customer");
+      addToast(err.response?.data?.error || "Failed to create customer", "error");
     }
   };
 
@@ -205,7 +208,7 @@ export function PosView() {
   // Submit sale transaction to API
   const handleCheckout = async () => {
     if (scPwdActive && (!scPwdName.trim() || !scPwdId.trim())) {
-      alert("Please fill out required Senior Citizen/PWD details.");
+      addToast("Please fill out required Senior Citizen/PWD details.", "error");
       return;
     }
     setSubmitting(true);
@@ -249,9 +252,10 @@ export function PosView() {
       setScPwdName("");
       setScPwdTin("");
       setShowPayModal(false);
+      addToast("Transaction completed successfully!", "success");
       loadData(); // reload inventory counts
     } catch (err: any) {
-      alert(err.response?.data?.error || "Transaction checkout failed");
+      addToast(err.response?.data?.error || "Transaction checkout failed", "error");
     } finally {
       setSubmitting(false);
     }
@@ -267,7 +271,7 @@ export function PosView() {
       window.open(url, "_blank");
     } catch (err) {
       console.error("Failed to print receipt:", err);
-      alert("Failed to load receipt PDF.");
+      addToast("Failed to load receipt PDF.", "error");
     }
   };
 

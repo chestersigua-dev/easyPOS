@@ -91,6 +91,10 @@ async function main() {
   console.log("\nPushing schema to database...");
   runCommand("npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss");
 
+  // Run seed script
+  console.log("\nSeeding default database...");
+  runCommand("npx prisma db seed");
+
   console.log("\n=== EasyPOS Setup Completed Successfully! ===");
 }
 

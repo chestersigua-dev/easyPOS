@@ -73,6 +73,9 @@ export async function saleRoutes(fastify: FastifyInstance) {
             throw new Error(`Product ${item.productId} not found`);
           }
 
+          let movementOldQty = product.quantity;
+          let movementNewQty = product.quantity - item.quantity;
+
           if (data.storeId) {
             const storeInv = await tx.storeInventory.findUnique({
               where: { productId_storeId: { productId: item.productId, storeId: data.storeId } },
@@ -80,6 +83,9 @@ export async function saleRoutes(fastify: FastifyInstance) {
             if (!storeInv || storeInv.quantity < item.quantity) {
               throw new Error(`Insufficient stock for product: ${product.name} at the selected store location. Available: ${storeInv?.quantity || 0}`);
             }
+
+            movementOldQty = storeInv.quantity;
+            movementNewQty = storeInv.quantity - item.quantity;
 
             // Update store inventory
             await tx.storeInventory.update({
@@ -143,8 +149,8 @@ export async function saleRoutes(fastify: FastifyInstance) {
               type: "OUT",
               quantity: item.quantity,
               reason: `Sale ${invoiceNo} ${data.storeId ? `(Store: ${data.storeId})` : ""}`,
-              oldQuantity: oldQty,
-              newQuantity: newQty,
+              oldQuantity: movementOldQty,
+              newQuantity: movementNewQty,
               createdBy,
             },
           });
@@ -346,14 +352,42 @@ export async function saleRoutes(fastify: FastifyInstance) {
               });
             } catch (err) {}
 
+            let movementOldQty = oldQty;
+            let movementNewQty = newQty;
+
+            if (sale.storeId) {
+              const storeInv = await tx.storeInventory.findUnique({
+                where: { productId_storeId: { productId: item.productId, storeId: sale.storeId } },
+              });
+              const currentStoreQty = storeInv?.quantity || 0;
+              movementOldQty = currentStoreQty;
+              movementNewQty = currentStoreQty + item.quantity;
+
+              // Revert store inventory in main db
+              await tx.storeInventory.upsert({
+                where: { productId_storeId: { productId: item.productId, storeId: sale.storeId } },
+                create: { productId: item.productId, storeId: sale.storeId, quantity: item.quantity },
+                update: { quantity: { increment: item.quantity } },
+              });
+
+              // Revert store inventory in nontaxable db
+              try {
+                await nontaxablePrisma.storeInventory.upsert({
+                  where: { productId_storeId: { productId: item.productId, storeId: sale.storeId } },
+                  create: { productId: item.productId, storeId: sale.storeId, quantity: item.quantity },
+                  update: { quantity: { increment: item.quantity } },
+                });
+              } catch (err) {}
+            }
+
             await tx.stockMovement.create({
               data: {
                 productId: item.productId,
                 type: "IN",
                 quantity: item.quantity,
                 reason: `Void of sale ${sale.invoiceNo}`,
-                oldQuantity: oldQty,
-                newQuantity: newQty,
+                oldQuantity: movementOldQty,
+                newQuantity: movementNewQty,
                 createdBy: request.user!.id,
               },
             });

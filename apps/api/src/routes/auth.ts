@@ -17,7 +17,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     const { email, password } = parseResult.data;
     const user = await prisma.user.findUnique({
       where: { email },
-      include: { role: true },
+      include: { role: true, tenant: true },
     });
 
     if (!user || user.status !== "ACTIVE") {
@@ -93,6 +93,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         mfaEnabled: user.mfaEnabled,
         profilePhoto: user.profilePhoto,
         enabledModules,
+        businessName: user.tenant?.name || null,
       },
     };
   });
@@ -374,9 +375,12 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // CRUD User Accounts (Requires permissions)
   fastify.get("/users", { preHandler: requirePermission("users:read") }, async (request) => {
+    const isSuperAdmin = request.user!.role === "SUPERADMIN";
     const users = await prisma.user.findMany({
-      where: { tenantId: request.user!.tenantId },
-      include: { role: true },
+      where: isSuperAdmin
+        ? { role: { name: "ADMIN" } }
+        : { tenantId: request.user!.tenantId },
+      include: { role: true, tenant: true },
     });
 
     return users.map((u) => ({
@@ -388,6 +392,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       roleId: u.roleId,
       status: u.status,
       createdAt: u.createdAt,
+      businessName: u.tenant?.name || null,
     }));
   });
 

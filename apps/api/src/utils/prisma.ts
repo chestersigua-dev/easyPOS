@@ -1,6 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import * as path from "path";
 import * as fs from "fs";
+import * as dotenv from "dotenv";
+
+dotenv.config({ path: path.resolve(__dirname, "..", "..", "..", "..", ".env") });
 
 const isPostgres =
   process.env.DATABASE_URL?.startsWith("postgresql") ||

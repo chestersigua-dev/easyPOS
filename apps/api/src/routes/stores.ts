@@ -5,8 +5,10 @@ import { requirePermission } from "../middleware/auth";
 export async function storeRoutes(fastify: FastifyInstance) {
   // Get all stores
   fastify.get("/", { preHandler: requirePermission("products:read") }, async (request) => {
+    const isSuperAdmin = request.user!.role === "SUPERADMIN";
     return prisma.store.findMany({
-      where: { tenantId: request.user!.tenantId },
+      where: isSuperAdmin ? {} : { tenantId: request.user!.tenantId },
+      include: { tenant: true },
       orderBy: { name: "asc" },
     });
   });

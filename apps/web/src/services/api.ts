@@ -8,9 +8,13 @@ export const api = axios.create({
   },
 });
 
-// Request Interceptor: Attach access token
+// Request Interceptor: Attach access token and dynamic API server URL
 api.interceptors.request.use(
   (config) => {
+    const storedUrl = localStorage.getItem("apiServerUrl");
+    if (storedUrl) {
+      config.baseURL = storedUrl + "/api/v1";
+    }
     const token = useAuthStore.getState().accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -62,7 +66,8 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshResponse = await axios.post("/api/v1/auth/refresh", {}, { withCredentials: true });
+        const storedUrl = localStorage.getItem("apiServerUrl") || "";
+        const refreshResponse = await axios.post(storedUrl + "/api/v1/auth/refresh", {}, { withCredentials: true });
         const { accessToken } = refreshResponse.data;
 
         // Save new token

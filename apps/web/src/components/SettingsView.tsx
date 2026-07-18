@@ -2,9 +2,12 @@ import React, { useEffect, useState } from "react";
 import { ShieldAlert, KeyRound, Save, Plus, Trash2, Smartphone, ShieldCheck, User } from "lucide-react";
 import { api } from "../services/api";
 import { useAuthStore } from "../store/auth";
+import { useToastStore } from "../store/toast";
+import { ThemeView } from "./ThemeView";
 
 export function SettingsView() {
   const { user, updateUser } = useAuthStore();
+  const addToast = useToastStore((state) => state.addToast);
   const [settings, setSettings] = useState<any>({
     APP_NAME: "EasyPOS Store",
     TAX_RATE: "12",
@@ -112,9 +115,9 @@ export function SettingsView() {
       });
       updateUser(res.data.user);
       setProfileData((prev) => ({ ...prev, password: "" }));
-      alert("Profile details updated successfully!");
+      addToast("Profile details updated successfully!", "success");
     } catch (err: any) {
-      alert(err.response?.data?.error || "Failed to save profile details");
+      addToast(err.response?.data?.error || "Failed to save profile details", "error");
     } finally {
       setProfileSaving(false);
     }
@@ -164,9 +167,9 @@ export function SettingsView() {
         });
       }
 
-      alert("SaaS license tier and modules updated successfully!");
+      addToast("SaaS license tier and modules updated successfully!", "success");
     } catch (err) {
-      alert("Failed to save SaaS license settings");
+      addToast("Failed to save SaaS license settings", "error");
     } finally {
       setSavingSaas(false);
     }
@@ -177,9 +180,9 @@ export function SettingsView() {
     setSaving(true);
     try {
       await api.post("/system/settings", settings);
-      alert("Settings saved successfully!");
+      addToast("Settings saved successfully!", "success");
     } catch (err) {
-      alert("Failed to save settings");
+      addToast("Failed to save settings", "error");
     } finally {
       setSaving(false);
     }
@@ -191,9 +194,10 @@ export function SettingsView() {
       await api.post("/auth/users", newUserData);
       setShowUserModal(false);
       setNewUserData({ email: "", password: "", firstName: "", lastName: "", roleId: "", status: "ACTIVE" });
+      addToast("User created successfully!", "success");
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || "Failed to create user");
+      addToast(err.response?.data?.error || "Failed to create user", "error");
     }
   };
 
@@ -201,9 +205,10 @@ export function SettingsView() {
     if (!confirm("Are you sure you want to delete this user?")) return;
     try {
       await api.delete(`/auth/users/${id}`);
+      addToast("User deleted successfully!", "success");
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || "Failed to delete user");
+      addToast(err.response?.data?.error || "Failed to delete user", "error");
     }
   };
 
@@ -213,9 +218,10 @@ export function SettingsView() {
       await api.post("/stores", newStoreData);
       setShowStoreModal(false);
       setNewStoreData({ name: "", address: "" });
+      addToast("Store location created successfully!", "success");
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || "Failed to create store location");
+      addToast(err.response?.data?.error || "Failed to create store location", "error");
     }
   };
 
@@ -226,8 +232,9 @@ export function SettingsView() {
       setMfaSecret(res.data.secret);
       setMfaQrUrl(res.data.qrDataUrl);
       setMfaStep("SETUP");
+      addToast("MFA secret generated. Scan the QR code to proceed.", "info");
     } catch (err) {
-      alert("MFA initialization failed");
+      addToast("MFA initialization failed", "error");
     }
   };
 
@@ -238,8 +245,9 @@ export function SettingsView() {
       updateUser({ mfaEnabled: true });
       setMfaStep("VERIFIED");
       setMfaToken("");
+      addToast("Multi-Factor Authentication enabled successfully!", "success");
     } catch (err: any) {
-      alert(err.response?.data?.error || "Verification failed");
+      addToast(err.response?.data?.error || "Verification failed", "error");
     }
   };
 
@@ -251,8 +259,9 @@ export function SettingsView() {
       setMfaStep("IDLE");
       setMfaSecret("");
       setMfaQrUrl("");
+      addToast("Multi-Factor Authentication disabled", "info");
     } catch (err) {
-      alert("Failed to disable MFA");
+      addToast("Failed to disable MFA", "error");
     }
   };
 
@@ -261,76 +270,6 @@ export function SettingsView() {
       {/* Settings Form Column */}
       <div className="md:col-span-2 space-y-6">
 
-        {/* SaaS License & Tier Configuration (SuperAdmin only) */}
-        {user?.role === "SUPERADMIN" && (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 border-l-4 border-l-sky-500">
-            <h2 className="text-base font-bold tracking-tight mb-4 flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-sky-500" /> SaaS Licensing & Tiers Configuration
-            </h2>
-
-            <form onSubmit={handleSaasSave} className="space-y-4">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400">License Plan / Tier</label>
-                <select
-                  value={saasPlan}
-                  onChange={(e) => handlePlanChange(e.target.value)}
-                  className="w-full mt-1 rounded-lg border border-slate-200 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-950 font-semibold focus:ring-1 focus:ring-sky-500 outline-none"
-                >
-                  <option value="STARTER">Starter Plan (Core POS & CRM only)</option>
-                  <option value="PROFESSIONAL">Professional Plan (POS, CRM, Inventory & Suppliers)</option>
-                  <option value="ENTERPRISE">Enterprise Plan (All Modules Unlimited)</option>
-                  <option value="CUSTOM">Custom Tier (Manually toggle active modules)</option>
-                </select>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Available Modules</span>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {[
-                    { id: "DASHBOARD", name: "Dashboard" },
-                    { id: "POS", name: "POS Screen" },
-                    { id: "PRODUCTS", name: "Inventory" },
-                    { id: "REPAIRS", name: "Repairs" },
-                    { id: "CUSTOMERS", name: "Customers" },
-                    { id: "SUPPLIERS", name: "Suppliers" },
-                    { id: "ACCOUNTING", name: "Accounting" },
-                  ].map((m) => {
-                    const isChecked = enabledModules.includes(m.id);
-                    const isDisabled = saasPlan !== "CUSTOM";
-                    return (
-                      <label
-                        key={m.id}
-                        className={`flex items-center gap-2.5 rounded-lg border p-2.5 transition-all text-xs font-semibold cursor-pointer select-none ${
-                          isChecked
-                            ? "border-sky-500 bg-sky-50/20 dark:bg-sky-950/20 text-sky-600 dark:text-sky-400"
-                            : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-850 text-slate-600 dark:text-slate-400"
-                        } ${isDisabled ? "opacity-75 cursor-not-allowed" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
-                          onChange={() => handleModuleToggle(m.id)}
-                          className="rounded border-slate-300 text-sky-500 focus:ring-sky-500 h-3.5 w-3.5"
-                        />
-                        <span>{m.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={savingSaas}
-                className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
-              >
-                {savingSaas ? "Updating license..." : "Save SaaS License Settings"}
-              </button>
-            </form>
-          </div>
-        )}
-        
         {/* Personal Profile Settings */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="text-base font-bold tracking-tight mb-4 flex items-center gap-2">
@@ -422,8 +361,7 @@ export function SettingsView() {
           </form>
         </div>
 
-        {/* Business Settings (Admins only) */}
-        {(user?.role === "SUPERADMIN" || user?.role === "ADMIN") && (
+        {user?.role === "ADMIN" && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h2 className="text-base font-bold tracking-tight mb-4 flex items-center gap-2">
               <Save className="h-5 w-5 text-sky-500" /> Business Profile & Localization
@@ -513,12 +451,14 @@ export function SettingsView() {
               <h2 className="text-base font-bold tracking-tight flex items-center gap-2">
                 <KeyRound className="h-5 w-5 text-sky-500" /> User Accounts Registry
               </h2>
-              <button
-                onClick={() => setShowUserModal(true)}
-                className="flex items-center gap-1 rounded bg-sky-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-600"
-              >
-                <Plus className="h-3 w-3" /> Add Account
-              </button>
+              {user?.role !== "SUPERADMIN" && (
+                <button
+                  onClick={() => setShowUserModal(true)}
+                  className="flex items-center gap-1 rounded bg-sky-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-600"
+                >
+                  <Plus className="h-3 w-3" /> Add Account
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -526,6 +466,7 @@ export function SettingsView() {
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 dark:border-slate-800">
                     <th className="pb-2">Name</th>
+                    {user?.role === "SUPERADMIN" && <th className="pb-2">Business</th>}
                     <th className="pb-2">Email</th>
                     <th className="pb-2">Role</th>
                     <th className="pb-2">Status</th>
@@ -538,6 +479,11 @@ export function SettingsView() {
                       <td className="py-2.5 font-semibold">
                         {u.firstName} {u.lastName}
                       </td>
+                      {user?.role === "SUPERADMIN" && (
+                        <td className="py-2.5 font-semibold text-sky-500">
+                          {u.businessName || "System / Global"}
+                        </td>
+                      )}
                       <td className="py-2.5 text-slate-500">{u.email}</td>
                       <td className="py-2.5 text-slate-900 dark:text-slate-200 font-bold">{u.role}</td>
                       <td className="py-2.5">
@@ -562,8 +508,8 @@ export function SettingsView() {
           </div>
         )}
 
-        {/* Store Locations Registry (Admins only) */}
-        {(user?.role === "SUPERADMIN" || user?.role === "ADMIN") && (
+        {/* Store Locations Registry (Tenant Admins only) */}
+        {user?.role === "ADMIN" && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-bold tracking-tight flex items-center gap-2">
@@ -605,6 +551,11 @@ export function SettingsView() {
               </table>
             </div>
           </div>
+        )}
+
+        {/* Theme Settings (Admin/SuperAdmin only) */}
+        {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
+          <ThemeView />
         )}
       </div>
 
