@@ -60,7 +60,7 @@ type Tab =
   | "BUSINESSES";
 
 export default function App() {
-  const { user, accessToken, setAuth, logout } = useAuthStore();
+  const { user, accessToken, setAuth, logout, originalToken, stopImpersonate } = useAuthStore();
   const { toasts, removeToast, addToast } = useToastStore();
 
   // Navigation
@@ -96,12 +96,12 @@ export default function App() {
   const [loggingIn, setLoggingIn] = useState(false);
 
   // App Settings Cache (Brand Name)
-  const [settingsAppName, setSettingsAppName] = useState("EasyPOS");
+  const [settingsAppName, setSettingsAppName] = useState("csERP");
 
-  // Compute display name: SuperAdmin always sees "EasyPOS", others see business name
+  // Compute display name: SuperAdmin always sees "csERP", others see business name
   const displayAppName = user?.role === "SUPERADMIN"
-    ? "EasyPOS"
-    : user?.businessName || settingsAppName || "EasyPOS";
+    ? "csERP"
+    : user?.businessName || settingsAppName || "csERP";
 
   // Load app name from settings
   const fetchSettings = async () => {
@@ -218,6 +218,12 @@ export default function App() {
     }
   };
 
+  const handleStopImpersonating = () => {
+    stopImpersonate();
+    addToast("Returned to SuperAdmin panel", "success");
+    window.location.href = "/";
+  };
+
   const toggleTheme = () => {
     const nextTheme = theme === "light" ? "dark" : "light";
     setTheme(nextTheme);
@@ -254,8 +260,8 @@ export default function App() {
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-slate-800 dark:bg-slate-900">
           <div className="text-center">
-            <span className="text-4xl">💻</span>
-            <h2 className="mt-4 text-2xl font-bold tracking-tight">EasyPOS Login</h2>
+            <img src="/csERP.png" alt="csERP" className="h-16 w-auto mx-auto mb-2 rounded-xl shadow" />
+            <h2 className="mt-2 text-2xl font-bold tracking-tight">csERP Login</h2>
             <p className="mt-1.5 text-xs text-slate-400">
               Computer Parts Shop Enterprise Point of Sale
             </p>
@@ -387,7 +393,7 @@ export default function App() {
 
         <div className="space-y-6">
           <div className="flex items-center gap-2 overflow-hidden min-w-0">
-            <span className="text-2xl shrink-0">💻</span>
+            <img src="/csERP.png" alt="csERP" className="h-8 w-8 rounded-lg object-cover shrink-0" />
             {(!sidebarCollapsed || mobileMenuOpen) && (
               <div className="transition-opacity duration-300 min-w-0">
                 <h2 className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
@@ -486,6 +492,19 @@ export default function App() {
             )}
           </div>
 
+          {originalToken && (
+            <button
+              onClick={handleStopImpersonating}
+              className={`flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-500/10 py-2 text-xs font-bold text-amber-600 hover:bg-amber-500/20 dark:border-amber-750 dark:text-amber-400 focus:outline-none ${
+                sidebarCollapsed && !mobileMenuOpen ? "w-full px-0" : "w-full"
+              }`}
+              title={sidebarCollapsed && !mobileMenuOpen ? "Exit Impersonation" : undefined}
+            >
+              <Crown className="h-4 w-4 shrink-0" />
+              {(!sidebarCollapsed || mobileMenuOpen) && <span>Exit Impersonation</span>}
+            </button>
+          )}
+
           <button
             onClick={handleLogout}
             className={`flex items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:border-slate-800 dark:hover:bg-rose-950/20 focus:outline-none ${
@@ -514,6 +533,11 @@ export default function App() {
             </button>
             <div className="text-xs font-bold text-slate-400">
               System status: <span className="text-emerald-500">Live & Encrypted</span>
+              {user && user.role !== "SUPERADMIN" && user.licenseExpiresAt && (
+                <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                  Subscription: <span className="text-emerald-500">Active ({user.licenseExpiresAt.split("T")[0]})</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -545,9 +569,9 @@ export default function App() {
 
         {/* Sticky Footer */}
         <footer className="border-t border-slate-200 bg-white px-8 py-3.5 dark:border-slate-800 dark:bg-slate-900 flex justify-between items-center text-xs text-slate-500 shrink-0">
-          <span className="font-medium">EasyPOS SaaS POS System v1.0</span>
+          <span className="font-medium">csERP SaaS POS System v1.0</span>
           <span>
-            EasyPOS&trade; by{" "}
+            csERP&trade; by{" "}
             <a
               href="https://chestersigua.com"
               target="_blank"

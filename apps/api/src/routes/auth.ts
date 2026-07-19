@@ -94,6 +94,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         profilePhoto: user.profilePhoto,
         enabledModules,
         businessName: user.tenant?.name || null,
+        licenseExpiresAt: user.tenant?.licenseExpiresAt || null,
       },
     };
   });
@@ -103,7 +104,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     const { userId, token } = request.body as { userId: string; token: string };
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { role: true },
+      include: { role: true, tenant: true },
     });
 
     if (!user || user.status !== "ACTIVE" || !user.mfaEnabled || !user.mfaSecret) {
@@ -164,6 +165,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         mfaEnabled: user.mfaEnabled,
         profilePhoto: user.profilePhoto,
         enabledModules,
+        licenseExpiresAt: user.tenant?.licenseExpiresAt || null,
       },
     };
   });
@@ -228,7 +230,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   fastify.get("/me", { preHandler: authenticate }, async (request) => {
     const user = await prisma.user.findUnique({
       where: { id: request.user!.id },
-      include: { role: { include: { permissions: true } } },
+      include: { role: { include: { permissions: true } }, tenant: true },
     });
 
     return {
@@ -241,6 +243,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         permissions: user!.role.permissions.map((p) => p.action),
         mfaEnabled: user!.mfaEnabled,
         profilePhoto: user!.profilePhoto,
+        licenseExpiresAt: user!.tenant?.licenseExpiresAt || null,
       },
     };
   });
@@ -306,7 +309,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   // Setup MFA
   fastify.post("/mfa/setup", { preHandler: authenticate }, async (request) => {
     const user = await prisma.user.findUnique({ where: { id: request.user!.id } });
-    const { secret, otpauth } = generateMfaSecret(user!.email, "EasyPOS Hub");
+    const { secret, otpauth } = generateMfaSecret(user!.email, "csERP Hub");
     const qrDataUrl = await generateQrCodeDataUrl(otpauth);
 
     // Temporarily save secret

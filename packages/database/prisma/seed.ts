@@ -46,8 +46,8 @@ async function main() {
   // 2. Create Default Tenant
   const tenant = await prisma.tenant.create({
     data: {
-      name: "EasyPOS Computer Parts Hub",
-      subdomain: "hub",
+      name: "PC Configure Computer Center",
+      subdomain: "pcconfig",
       plan: "ENTERPRISE",
       status: "ACTIVE",
     },
@@ -55,11 +55,11 @@ async function main() {
 
   // 3. Create Settings
   const defaultSettings = [
-    { key: "APP_NAME", value: "EasyPOS Hub" },
+    { key: "APP_NAME", value: "PC Configure Computer Center" },
     { key: "TAX_RATE", value: "12" }, // 12% VAT (Philippine default)
     { key: "CURRENCY", value: "PHP" },
     { key: "TIMEZONE", value: "Asia/Manila" },
-    { key: "RECEIPT_HEADER", value: "EASYPOS COMPUTER PARTS HUB\n123 Tech Street, Cyberzone\nTel: 555-0199" },
+    { key: "RECEIPT_HEADER", value: "PC Configure Computer Center\n1271 MacArthur Hwy, Ninoy Aquino (Marisol), Angeles, 2009 Pampanga\nTel: (045) 436 3832" },
     { key: "RECEIPT_FOOTER", value: "Thank you for your purchase!\nWarranty claims require official receipt." },
     { key: "THEME_COLOR", value: "#0ea5e9" }, // Sky-500
   ];
@@ -194,11 +194,11 @@ async function main() {
 
   // 6. Create Users (Default credentials)
   const salt = bcrypt.genSaltSync(10);
-  const passwordHash = bcrypt.hashSync("admin123", salt);
+  const passwordHash = bcrypt.hashSync("N4suaKDS!", salt);
 
   const superadmin = await prisma.user.create({
     data: {
-      email: "chestersigua@easypos.com",
+      email: "chestersigua@gmail.com",
       passwordHash: passwordHash,
       firstName: "Chester",
       lastName: "Sigua",
@@ -210,10 +210,10 @@ async function main() {
 
   const admin = await prisma.user.create({
     data: {
-      email: "admin@easypos.com",
-      passwordHash: passwordHash,
-      firstName: "Marcus",
-      lastName: "Manager",
+      email: "ian@pcconfig.com",
+      passwordHash: bcrypt.hashSync("admin123", salt),
+      firstName: "Iannel",
+      lastName: "Bondoc",
       roleId: roleAdmin.id,
       tenantId: tenant.id,
       status: "ACTIVE",
@@ -222,10 +222,10 @@ async function main() {
 
   const accountant = await prisma.user.create({
     data: {
-      email: "accounting@easypos.com",
+      email: "bebang@pcconfig.com",
       passwordHash: bcrypt.hashSync("accounting123", salt),
-      firstName: "Fiona",
-      lastName: "Finance",
+      firstName: "Ivylyn",
+      lastName: "Bondoc",
       roleId: roleAccounting.id,
       tenantId: tenant.id,
       status: "ACTIVE",
@@ -234,10 +234,10 @@ async function main() {
 
   const salesperson = await prisma.user.create({
     data: {
-      email: "sales@easypos.com",
+      email: "sales@pcconfig.com",
       passwordHash: bcrypt.hashSync("sales123", salt),
-      firstName: "Sarah",
-      lastName: "Sales",
+      firstName: "Jay ANne",
+      lastName: "Luna",
       roleId: roleSales.id,
       tenantId: tenant.id,
       status: "ACTIVE",
@@ -248,8 +248,8 @@ async function main() {
     data: {
       email: "repairs@easypos.com",
       passwordHash: bcrypt.hashSync("repairs123", salt),
-      firstName: "Toby",
-      lastName: "Tech",
+      firstName: "Cleo",
+      lastName: "De Guzman",
       roleId: roleRepairs.id,
       tenantId: tenant.id,
       status: "ACTIVE",
@@ -261,16 +261,32 @@ async function main() {
   // 6.5. Seed Stores
   const store1 = await prisma.store.create({
     data: {
-      name: "Quezon City Main Store",
-      address: "123 Tech Street, Cyberzone, Quezon City",
+      name: "PC Configure Angeles City",
+      address: "DMC Bldg., 1271 MacArthur Hwy, Ninoy Aquino (Marisol), Angeles, Pampanga, 2009",
       tenantId: tenant.id,
     },
   });
 
   const store2 = await prisma.store.create({
     data: {
-      name: "Makati Outlet Branch",
-      address: "45 Silicon Lane, Makati City",
+      name: "PC Configure Tarlac",
+      address: "Unit 2, Felsenron Bldg., Block 6, San Roque, Tarlac City, Tarlac, 2300",
+      tenantId: tenant.id,
+    },
+  });
+
+  const store3 = await prisma.store.create({
+    data: {
+      name: "PC Configure Urdaneta",
+      address: "#22 Josefa Bldg., San Vincente Centro, Urdaneta, Pangasinan, 2428",
+      tenantId: tenant.id,
+    },
+  });
+
+  const store4 = await prisma.store.create({
+    data: {
+      name: "PC Configure Bulacan",
+      address: "2nd Flr Jesters Bldg., BS Aquino Ave, Bagong Nayon, Baliuag, Bulacan, 3006",
       tenantId: tenant.id,
     },
   });
@@ -618,22 +634,22 @@ async function main() {
   console.log("Seeded Repairs.");
 
   // --- SECOND TENANT SEEDING ---
-  console.log("Seeding second tenant: ByteCraft Electronics...");
+  console.log("Seeding second tenant: Techsyapo...");
   const tenant2 = await prisma.tenant.create({
     data: {
-      name: "ByteCraft Electronics",
-      subdomain: "bytecraft",
+      name: "Techsyapo",
+      subdomain: "techsyapo",
       plan: "PROFESSIONAL",
       status: "ACTIVE",
     },
   });
 
   const tenant2Settings = [
-    { key: "APP_NAME", value: "ByteCraft Electronics" },
+    { key: "APP_NAME", value: "Techsyapo" },
     { key: "TAX_RATE", value: "12" },
     { key: "CURRENCY", value: "USD" },
     { key: "TIMEZONE", value: "Asia/Manila" },
-    { key: "RECEIPT_HEADER", value: "BYTECRAFT ELECTRONICS\n456 Tech Park, Pasig City\nTel: 555-0245" },
+    { key: "RECEIPT_HEADER", value: "Techsyapo\nMacArthur Hwy, San Fernando, 2000 Pampanga\nTel: 0456494678" },
     { key: "RECEIPT_FOOTER", value: "Thank you for shopping with us!" },
     { key: "THEME_COLOR", value: "#0ea5e9" },
   ];
@@ -650,10 +666,10 @@ async function main() {
 
   const tenant2Admin = await prisma.user.create({
     data: {
-      email: "admin@bytecraft.com",
+      email: "kit@techsyapo.com",
       passwordHash: passwordHash,
-      firstName: "Sarah",
-      lastName: "Owner",
+      firstName: "Keithvin",
+      lastName: "Nicolas",
       roleId: roleAdmin.id,
       tenantId: tenant2.id,
       status: "ACTIVE",
@@ -662,10 +678,10 @@ async function main() {
 
   const tenant2Sales = await prisma.user.create({
     data: {
-      email: "sales@bytecraft.com",
+      email: "aimee@techsyapo.com",
       passwordHash: bcrypt.hashSync("sales123", salt),
-      firstName: "Bob",
-      lastName: "Seller",
+      firstName: "Aimee",
+      lastName: "Ang",
       roleId: roleSales.id,
       tenantId: tenant2.id,
       status: "ACTIVE",
@@ -674,16 +690,24 @@ async function main() {
 
   const tenant2Store1 = await prisma.store.create({
     data: {
-      name: "ByteCraft Pasig Main",
-      address: "456 Tech Park, Pasig City",
+      name: "Techsyapo San Fernando",
+      address: "MacArthur Hwy, City of San Fernando, Pampanga, 2000",
       tenantId: tenant2.id,
     },
   });
 
   const tenant2Store2 = await prisma.store.create({
     data: {
-      name: "ByteCraft Taguig Express",
-      address: "BGC High Street, Taguig City",
+      name: "Techsyapo Angeles",
+      address: "MacArthur Hwy, Balibago, Angeles City, Pampanga, 2009",
+      tenantId: tenant2.id,
+    },
+  });
+
+  const tenant2Store3 = await prisma.store.create({
+    data: {
+      name: "Techsyapo Olongapo",
+      address: "#510 Rizal Avenue, Brgy. East Tapinac, Olongapo City, Zambales, 2200",
       tenantId: tenant2.id,
     },
   });

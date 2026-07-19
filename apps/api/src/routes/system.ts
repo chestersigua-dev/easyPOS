@@ -143,7 +143,7 @@ export async function systemRoutes(fastify: FastifyInstance) {
       where: { tenantId_key: { tenantId: request.user!.tenantId, key: "APP_NAME" } },
     });
 
-    if (confirmAppName !== (appNameSetting?.value || "EasyPOS Hub")) {
+    if (confirmAppName !== (appNameSetting?.value || "csERP Hub")) {
       return reply.status(400).send({ error: "Confirm app name does not match current app name" });
     }
 
@@ -316,7 +316,7 @@ export async function systemRoutes(fastify: FastifyInstance) {
         await nontaxablePrisma.user.deleteMany({ where: { id: { not: superAdmin.id } } });
 
         const defaultSettings = [
-          { key: "APP_NAME", value: "EasyPOS Store" },
+          { key: "APP_NAME", value: "csERP Store" },
           { key: "TAX_RATE", value: "12" },
           { key: "CURRENCY", value: "PHP" },
           { key: "TIMEZONE", value: "Asia/Manila" },
@@ -332,7 +332,7 @@ export async function systemRoutes(fastify: FastifyInstance) {
 
       // 3. Setup default settings
       const defaultSettings = [
-        { key: "APP_NAME", value: "EasyPOS Store" },
+        { key: "APP_NAME", value: "csERP Store" },
         { key: "TAX_RATE", value: "12" },
         { key: "CURRENCY", value: "PHP" },
         { key: "TIMEZONE", value: "Asia/Manila" },
@@ -438,7 +438,7 @@ export async function systemRoutes(fastify: FastifyInstance) {
         settings: true,
         stores: true
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { name: "asc" }
     });
 
     return tenants.map(t => {

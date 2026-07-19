@@ -135,11 +135,9 @@ export function SalesHistoryView() {
                 setShowingNontaxable(!showingNontaxable);
                 setSelectedSale(null);
               }}
-              title="Double-click to toggle taxable/non-taxable registry"
-              className="cursor-pointer"
             >
               <FileText
-                className={`h-6 w-6 transition-colors ${showingNontaxable ? "text-emerald-500 hover:text-emerald-600" : "text-slate-400 hover:text-slate-600"}`}
+                className={`h-6 w-6 ${showingNontaxable ? "text-emerald-500" : "text-slate-400"}`}
               />
             </span>
             <div>

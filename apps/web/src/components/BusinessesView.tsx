@@ -22,7 +22,7 @@ import { useAuthStore } from "../store/auth";
 
 export function BusinessesView() {
   const addToast = useToastStore((state) => state.addToast);
-  const { setAuth } = useAuthStore();
+  const { setImpersonate, accessToken: currentToken, user: currentUser } = useAuthStore();
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -327,7 +327,9 @@ export function BusinessesView() {
   const handleImpersonate = async (tenantId: string) => {
     try {
       const res = await api.post(`/system/tenants/${tenantId}/impersonate`);
-      setAuth(res.data.accessToken, res.data.user);
+      if (currentToken && currentUser) {
+        setImpersonate(res.data.accessToken, res.data.user, currentToken, currentUser);
+      }
       addToast(`Impersonating admin of ${res.data.user.businessName || "tenant"}`, "success");
       // Redirect to main view / dashboard
       window.location.href = "/";

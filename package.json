@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "setup": "node scripts/init-dev.js",
-    "dev": "npm run setup && concurrently \"npm run dev --workspace=apps/api\" \"npm run dev --workspace=apps/web\"",
+    "dev": "npm run setup && concurrently \"npm run dev --workspace=apps/api\" \"npm run dev --workspace=apps/web\" \"node scripts/start-tunnel.js\"",
     "build": "npm run build --workspaces",
     "test": "vitest run"
   },

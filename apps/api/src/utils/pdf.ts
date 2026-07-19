@@ -10,7 +10,7 @@ export function generateReceiptPdf(sale: any, tenantSettings: any): Promise<Buff
     doc.on("error", (err) => reject(err));
 
     // Retrieve BIR metadata settings or use compliant default fallbacks
-    const appName = tenantSettings.APP_NAME || "EasyPOS Computer Parts Hub";
+    const appName = tenantSettings.APP_NAME || "csERP Computer Parts Hub";
     const busStyle = tenantSettings.BIR_BUSINESS_STYLE || "Retail POS & Services";
     const address = tenantSettings.BIR_ADDRESS || "123 Tech Street, Cyberzone, Quezon City";
     const tin = tenantSettings.BIR_TIN || "123-456-789-00000";
@@ -194,7 +194,7 @@ export function generateReceiptPdf(sale: any, tenantSettings: any): Promise<Buff
     // BIR Footers (System and PTU Details)
     doc.y = sigY + 50;
     doc.fontSize(5.5).font("Helvetica").fillColor("#64748b");
-    doc.text("POS Developer: EasyPOS Hub Philippines Inc.  |  Address: 123 Tech Tower, Makati City, Metro Manila  |  TIN: 987-654-321-000", { align: "center" });
+    doc.text("POS Developer: csERP Hub Philippines Inc.  |  Address: 123 Tech Tower, Makati City, Metro Manila  |  TIN: 987-654-321-000", { align: "center" });
     doc.text("Accreditation No: ACC-98765-43210 (Issued: 07/16/2026)  |  PTU validity statement: Infinite / Lifetime PTU", { align: "center" });
     doc.moveDown(0.2);
     doc.fontSize(7).font("Helvetica-Bold").fillColor("#475569").text("THIS SERVES AS AN OFFICIAL RECEIPT.", { align: "center" });
@@ -215,7 +215,7 @@ export function generateRepairTicketPdf(ticket: any, tenantSettings: any): Promi
 
     // Page Header
     doc.fontSize(18).text("REPAIR WORK TICKET", { align: "center" });
-    doc.fontSize(10).text(tenantSettings.appName || "EasyPOS Store", { align: "center" });
+    doc.fontSize(10).text(tenantSettings.appName || "csERP Store", { align: "center" });
     doc.moveDown(2);
 
     // Ticket Details

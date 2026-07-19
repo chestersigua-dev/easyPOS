@@ -17,7 +17,7 @@ import { storeRoutes } from "./routes/stores";
 import { transferRoutes } from "./routes/transfers";
 
 export async function buildApp(): Promise<FastifyInstance> {
-  const app = fastify({ logger: true });
+  const app = fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 });
 
   // Register Security Plugins
   await app.register(helmet, {

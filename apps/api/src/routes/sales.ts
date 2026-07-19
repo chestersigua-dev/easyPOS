@@ -5,9 +5,9 @@ import { requirePermission } from "../middleware/auth";
 import { logAudit } from "../utils/audit";
 import { generateReceiptPdf } from "../utils/pdf";
 
-async function generateInvoiceNumber(tenantId: string): Promise<string> {
+async function generateInvoiceNumber(tenantId: string, isNonTaxable: boolean): Promise<string> {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const prefix = `INV-${dateStr}-`;
+  const prefix = isNonTaxable ? `NTX-${dateStr}-` : `INV-${dateStr}-`;
 
   const [countMain, countNontax] = await Promise.all([
     prisma.sale.count({
@@ -34,8 +34,19 @@ export async function saleRoutes(fastify: FastifyInstance) {
   fastify.get("/", { preHandler: requirePermission("sales:read") }, async (request) => {
     const { nontaxable } = request.query as { nontaxable?: string };
     const dbSalesClient = nontaxable === "true" ? nontaxablePrisma : prisma;
+    const whereClause: any = { tenantId: request.user!.tenantId };
+
+    // For PostgreSQL/Neon where nontaxablePrisma === prisma, apply filtering by tax
+    if (nontaxablePrisma === prisma) {
+      if (nontaxable === "true") {
+        whereClause.tax = 0;
+      } else {
+        whereClause.tax = { gt: 0 };
+      }
+    }
+
     return dbSalesClient.sale.findMany({
-      where: { tenantId: request.user!.tenantId },
+      where: whereClause,
       include: {
         customer: true,
         items: { include: { product: true } },
@@ -61,7 +72,7 @@ export async function saleRoutes(fastify: FastifyInstance) {
     try {
       const result = await prisma.$transaction(async (tx) => {
         // 1. Generate Invoice No
-        const invoiceNo = await generateInvoiceNumber(tenantId);
+        const invoiceNo = await generateInvoiceNumber(tenantId, isNonTaxable);
 
         // 2. Validate and adjust product quantities
         for (const item of data.items) {
@@ -95,10 +106,12 @@ export async function saleRoutes(fastify: FastifyInstance) {
 
             // Sync store inventory update to nontaxable db
             try {
-              await nontaxablePrisma.storeInventory.update({
-                where: { productId_storeId: { productId: item.productId, storeId: data.storeId } },
-                data: { quantity: { decrement: item.quantity } },
-              });
+              if (nontaxablePrisma !== prisma) {
+                await nontaxablePrisma.storeInventory.update({
+                  where: { productId_storeId: { productId: item.productId, storeId: data.storeId } },
+                  data: { quantity: { decrement: item.quantity } },
+                });
+              }
             } catch (err) {}
           } else {
             if (product.quantity < item.quantity) {
@@ -133,13 +146,15 @@ export async function saleRoutes(fastify: FastifyInstance) {
 
           // Sync product table update to nontaxable db
           try {
-            await nontaxablePrisma.product.update({
-              where: { id: item.productId },
-              data: {
-                quantity: newQty,
-                serialNumbers: updatedSerialsStr,
-              },
-            });
+            if (nontaxablePrisma !== prisma) {
+              await nontaxablePrisma.product.update({
+                where: { id: item.productId },
+                data: {
+                  quantity: newQty,
+                  serialNumbers: updatedSerialsStr,
+                },
+              });
+            }
           } catch (err) {}
 
           // Log stock movement
@@ -169,18 +184,20 @@ export async function saleRoutes(fastify: FastifyInstance) {
 
           // Sync loyalty points to nontaxable db
           try {
-            await nontaxablePrisma.customer.update({
-              where: { id: data.customerId },
-              data: {
-                loyaltyPoints: { increment: pointsEarned },
-              },
-            });
+            if (nontaxablePrisma !== prisma) {
+              await nontaxablePrisma.customer.update({
+                where: { id: data.customerId },
+                data: {
+                  loyaltyPoints: { increment: pointsEarned },
+                },
+              });
+            }
           } catch (err) {}
         }
 
         // 4. Create Sale
         let sale;
-        if (isNonTaxable) {
+        if (isNonTaxable && nontaxablePrisma !== prisma) {
           sale = await nontaxablePrisma.sale.create({
             data: {
               invoiceNo,
@@ -269,16 +286,18 @@ export async function saleRoutes(fastify: FastifyInstance) {
         }
 
         return sale;
-      });
+      }, { timeout: 25000 });
 
-      await logAudit({
-        userId: request.user!.id,
-        action: "CREATE_SALE",
-        entity: "Sale",
-        entityId: result.id,
-        newValue: { invoiceNo: result.invoiceNo, total: result.total },
-        tenantId,
-      });
+      if (!isNonTaxable) {
+        await logAudit({
+          userId: request.user!.id,
+          action: "CREATE_SALE",
+          entity: "Sale",
+          entityId: result.id,
+          newValue: { invoiceNo: result.invoiceNo, total: result.total },
+          tenantId,
+        });
+      }
 
       return result;
     } catch (error: any) {
@@ -343,13 +362,15 @@ export async function saleRoutes(fastify: FastifyInstance) {
 
             // Sync updated quantity to nontaxable db
             try {
-              await nontaxablePrisma.product.update({
-                where: { id: item.productId },
-                data: {
-                  quantity: newQty,
-                  serialNumbers: updatedSerialsStr,
-                },
-              });
+              if (nontaxablePrisma !== prisma) {
+                await nontaxablePrisma.product.update({
+                  where: { id: item.productId },
+                  data: {
+                    quantity: newQty,
+                    serialNumbers: updatedSerialsStr,
+                  },
+                });
+              }
             } catch (err) {}
 
             let movementOldQty = oldQty;
@@ -372,11 +393,13 @@ export async function saleRoutes(fastify: FastifyInstance) {
 
               // Revert store inventory in nontaxable db
               try {
-                await nontaxablePrisma.storeInventory.upsert({
-                  where: { productId_storeId: { productId: item.productId, storeId: sale.storeId } },
-                  create: { productId: item.productId, storeId: sale.storeId, quantity: item.quantity },
-                  update: { quantity: { increment: item.quantity } },
-                });
+                if (nontaxablePrisma !== prisma) {
+                  await nontaxablePrisma.storeInventory.upsert({
+                    where: { productId_storeId: { productId: item.productId, storeId: sale.storeId } },
+                    create: { productId: item.productId, storeId: sale.storeId, quantity: item.quantity },
+                    update: { quantity: { increment: item.quantity } },
+                  });
+                }
               } catch (err) {}
             }
 
@@ -406,17 +429,19 @@ export async function saleRoutes(fastify: FastifyInstance) {
 
           // Sync loyalty points deduction to nontaxable db
           try {
-            await nontaxablePrisma.customer.update({
-              where: { id: sale.customerId },
-              data: {
-                loyaltyPoints: { decrement: pointsEarned },
-              },
-            });
+            if (nontaxablePrisma !== prisma) {
+              await nontaxablePrisma.customer.update({
+                where: { id: sale.customerId },
+                data: {
+                  loyaltyPoints: { decrement: pointsEarned },
+                },
+              });
+            }
           } catch (err) {}
         }
 
         // Mark invoice status as VOID in the respective database
-        if (isNontaxable) {
+        if (isNontaxable && nontaxablePrisma !== prisma) {
           await nontaxablePrisma.sale.update({
             where: { id },
             data: { status: "VOID" },
@@ -429,15 +454,17 @@ export async function saleRoutes(fastify: FastifyInstance) {
         }
       });
 
-      await logAudit({
-        userId: request.user!.id,
-        action: "VOID_SALE",
-        entity: "Sale",
-        entityId: id,
-        oldValue: { status: sale.status },
-        newValue: { status: "VOID" },
-        tenantId: request.user!.tenantId,
-      });
+      if (!isNontaxable) {
+        await logAudit({
+          userId: request.user!.id,
+          action: "VOID_SALE",
+          entity: "Sale",
+          entityId: id,
+          oldValue: { status: sale.status },
+          newValue: { status: "VOID" },
+          tenantId: request.user!.tenantId,
+        });
+      }
 
       return { success: true };
     } catch (error: any) {

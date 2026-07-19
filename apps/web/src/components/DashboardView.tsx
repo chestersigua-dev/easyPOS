@@ -122,7 +122,7 @@ export function DashboardView() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Shield className="h-7 w-7 text-sky-500 animate-pulse" />
-              <span>EasyPOS SaaS Multi-Tenant Control Hub</span>
+              <span>csERP SaaS Multi-Tenant ERP</span>
             </h1>
             <p className="text-xs text-slate-400">
               System performance monitor, billing tiers registry, and business license expiries control center.

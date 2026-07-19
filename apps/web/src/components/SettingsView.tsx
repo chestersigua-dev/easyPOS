@@ -9,7 +9,7 @@ export function SettingsView() {
   const { user, updateUser } = useAuthStore();
   const addToast = useToastStore((state) => state.addToast);
   const [settings, setSettings] = useState<any>({
-    APP_NAME: "EasyPOS Store",
+    APP_NAME: "csERP Store",
     TAX_RATE: "12",
     CURRENCY: "PHP",
     TIMEZONE: "Asia/Manila",

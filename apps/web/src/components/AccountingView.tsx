@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Calendar, FileText, AlertTriangle, ShieldCheck, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Calendar, FileText, AlertTriangle, ShieldCheck, RefreshCw, Landmark } from "lucide-react";
 import { api } from "../services/api";
 
 export function AccountingView() {
@@ -65,35 +65,26 @@ export function AccountingView() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Accounting & Auditing</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Profit and Loss calculations, expense registers, and security audit trail logs.
-          </p>
-        </div>
-
-        {/* Toggle Report Type */}
-        <div className="flex rounded-lg border border-slate-200 p-1 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold self-start sm:self-auto shrink-0 shadow-sm select-none">
-          <button
-            onClick={() => setShowNontaxableReport(false)}
-            className={`px-3 py-1.5 rounded-md transition-all ${
-              !showNontaxableReport
-                ? "bg-sky-500 text-white shadow-sm"
-                : "text-slate-500 hover:text-slate-950 dark:hover:text-slate-200"
-            }`}
+        <div className="flex items-center gap-2 select-none">
+          <span
+            onDoubleClick={() => {
+              setShowNontaxableReport(!showNontaxableReport);
+            }}
           >
-            Taxable (VAT) Sales Report
-          </button>
-          <button
-            onClick={() => setShowNontaxableReport(true)}
-            className={`px-3 py-1.5 rounded-md transition-all ${
-              showNontaxableReport
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-slate-500 hover:text-slate-950 dark:hover:text-slate-200"
-            }`}
-          >
-            Non-Taxable Sales Report
-          </button>
+            <Landmark
+              className={`h-6 w-6 ${showNontaxableReport ? "text-emerald-500" : "text-slate-450"}`}
+            />
+          </span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {showNontaxableReport ? "Accounting & Auditing (Non-Taxable)" : "Accounting & Auditing"}
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {showNontaxableReport 
+                ? "Profit and Loss calculations, expense registers, and security audit trail logs for non-taxable sales."
+                : "Profit and Loss calculations, expense registers, and security audit trail logs."}
+            </p>
+          </div>
         </div>
       </div>
 
