@@ -13,13 +13,16 @@ import {
   RefreshCw,
   Lock,
   X,
-  FileText
+  FileText,
+  LogIn
 } from "lucide-react";
 import { api } from "../services/api";
 import { useToastStore } from "../store/toast";
+import { useAuthStore } from "../store/auth";
 
 export function BusinessesView() {
   const addToast = useToastStore((state) => state.addToast);
+  const { setAuth } = useAuthStore();
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -321,6 +324,18 @@ export function BusinessesView() {
     }
   };
 
+  const handleImpersonate = async (tenantId: string) => {
+    try {
+      const res = await api.post(`/system/tenants/${tenantId}/impersonate`);
+      setAuth(res.data.accessToken, res.data.user);
+      addToast(`Impersonating admin of ${res.data.user.businessName || "tenant"}`, "success");
+      // Redirect to main view / dashboard
+      window.location.href = "/";
+    } catch (err: any) {
+      addToast(err.response?.data?.error || "Failed to impersonate business admin.", "error");
+    }
+  };
+
   // Metrics calculations
   const totalBiz = businesses.length;
   const activeBiz = businesses.filter((b) => b.status === "ACTIVE").length;
@@ -528,6 +543,13 @@ export function BusinessesView() {
                             title="Edit Subscription Details"
                           >
                             <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleImpersonate(biz.id)}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-amber-500 dark:hover:bg-slate-800"
+                            title="Impersonate Business Admin"
+                          >
+                            <LogIn className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(biz.id, biz.name)}

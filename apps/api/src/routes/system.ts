@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify";
 import { Prisma } from "@prisma/client";
 import { prisma, nontaxablePrisma } from "../utils/prisma";
 import { requirePermission } from "../middleware/auth";
-import { comparePassword, hashPassword } from "../utils/auth";
+import { comparePassword, hashPassword, generateAccessToken } from "../utils/auth";
 import { verifyMfaToken } from "../utils/totp";
 import { logAudit } from "../utils/audit";
 import { createDatabaseBackup, restoreDatabaseFromBackup, listAvailableBackups } from "../utils/backup";
@@ -944,6 +944,70 @@ export async function systemRoutes(fastify: FastifyInstance) {
     } catch (err: any) {
       return reply.status(500).send({ error: err.message || "Failed to delete business" });
     }
+  });
+
+  // Impersonate tenant admin
+  fastify.post("/tenants/:tenantId/impersonate", { preHandler: requirePermission("system:settings") }, async (request, reply) => {
+    if (request.user?.role !== "SUPERADMIN") {
+      return reply.status(403).send({ error: "Access denied: SuperAdmin role required" });
+    }
+
+    const { tenantId } = request.params as { tenantId: string };
+
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        tenantId,
+        role: {
+          name: "ADMIN"
+        }
+      },
+      include: {
+        role: true,
+        tenant: true
+      }
+    });
+
+    if (!targetUser) {
+      return reply.status(404).send({ error: "No admin user found for this business" });
+    }
+
+    const accessToken = generateAccessToken({
+      userId: targetUser.id,
+      tenantId: targetUser.tenantId,
+      role: targetUser.role.name,
+    });
+
+    // Write audit log
+    await logAudit({
+      userId: request.user!.id,
+      action: "SUPERADMIN_IMPERSONATION",
+      entity: "User",
+      entityId: targetUser.id,
+      tenantId: request.user!.tenantId,
+      endpoint: `/api/v1/system/tenants/${tenantId}/impersonate`,
+    });
+
+    const enabledModulesSetting = await prisma.setting.findUnique({
+      where: { tenantId_key: { tenantId: targetUser.tenantId, key: "ENABLED_MODULES" } },
+    });
+    const enabledModules = enabledModulesSetting
+      ? enabledModulesSetting.value.split(",")
+      : ["DASHBOARD", "POS", "PRODUCTS", "REPAIRS", "CUSTOMERS", "SUPPLIERS", "ACCOUNTING"];
+
+    return {
+      accessToken,
+      user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        firstName: targetUser.firstName,
+        lastName: targetUser.lastName,
+        role: targetUser.role.name,
+        mfaEnabled: false,
+        profilePhoto: targetUser.profilePhoto,
+        enabledModules,
+        businessName: targetUser.tenant?.name || null,
+      },
+    };
   });
 
   // Get all license tiers and rates

@@ -616,6 +616,230 @@ async function main() {
   });
 
   console.log("Seeded Repairs.");
+
+  // --- SECOND TENANT SEEDING ---
+  console.log("Seeding second tenant: ByteCraft Electronics...");
+  const tenant2 = await prisma.tenant.create({
+    data: {
+      name: "ByteCraft Electronics",
+      subdomain: "bytecraft",
+      plan: "PROFESSIONAL",
+      status: "ACTIVE",
+    },
+  });
+
+  const tenant2Settings = [
+    { key: "APP_NAME", value: "ByteCraft Electronics" },
+    { key: "TAX_RATE", value: "12" },
+    { key: "CURRENCY", value: "USD" },
+    { key: "TIMEZONE", value: "Asia/Manila" },
+    { key: "RECEIPT_HEADER", value: "BYTECRAFT ELECTRONICS\n456 Tech Park, Pasig City\nTel: 555-0245" },
+    { key: "RECEIPT_FOOTER", value: "Thank you for shopping with us!" },
+    { key: "THEME_COLOR", value: "#0ea5e9" },
+  ];
+
+  for (const s of tenant2Settings) {
+    await prisma.setting.create({
+      data: {
+        key: s.key,
+        value: s.value,
+        tenantId: tenant2.id,
+      },
+    });
+  }
+
+  const tenant2Admin = await prisma.user.create({
+    data: {
+      email: "admin@bytecraft.com",
+      passwordHash: passwordHash,
+      firstName: "Sarah",
+      lastName: "Owner",
+      roleId: roleAdmin.id,
+      tenantId: tenant2.id,
+      status: "ACTIVE",
+    },
+  });
+
+  const tenant2Sales = await prisma.user.create({
+    data: {
+      email: "sales@bytecraft.com",
+      passwordHash: bcrypt.hashSync("sales123", salt),
+      firstName: "Bob",
+      lastName: "Seller",
+      roleId: roleSales.id,
+      tenantId: tenant2.id,
+      status: "ACTIVE",
+    },
+  });
+
+  const tenant2Store1 = await prisma.store.create({
+    data: {
+      name: "ByteCraft Pasig Main",
+      address: "456 Tech Park, Pasig City",
+      tenantId: tenant2.id,
+    },
+  });
+
+  const tenant2Store2 = await prisma.store.create({
+    data: {
+      name: "ByteCraft Taguig Express",
+      address: "BGC High Street, Taguig City",
+      tenantId: tenant2.id,
+    },
+  });
+
+  const tenant2Supplier = await prisma.supplier.create({
+    data: {
+      companyName: "Global Chips Logistics",
+      contactPerson: "Jane Chen",
+      phone: "+639151234567",
+      email: "jane@globalchips.com",
+      address: "BGC Taguig City",
+      tin: "111-222-333-000",
+      notes: "Logistics and microcontrollers",
+      balance: 5000.0,
+      tenantId: tenant2.id,
+    },
+  });
+
+  const t2Prod1 = await prisma.product.create({
+    data: {
+      sku: "BC-ESP32-WROOM",
+      barcode: "ESP32WROOM32D",
+      name: "ESP32-WROOM-32D Development Board",
+      brand: "Espressif",
+      category: "Microcontrollers",
+      description: "Wi-Fi + BT + BLE MCU module",
+      purchaseCost: 150.0,
+      sellingPrice: 250.0,
+      wholesalePrice: 220.0,
+      quantity: 100,
+      minStock: 20,
+      maxStock: 500,
+      reorderLevel: 30,
+      warranty: "7 Days Replacement Warranty",
+      location: "Bin 4",
+      serialized: false,
+      tenantId: tenant2.id,
+    },
+  });
+
+  const t2Prod2 = await prisma.product.create({
+    data: {
+      sku: "BC-RASP-PI-4",
+      barcode: "RASPPI4-4GB",
+      name: "Raspberry Pi 4 Model B (4GB RAM)",
+      brand: "Raspberry Pi",
+      category: "Single Board Computers",
+      description: "Broadcom BCM2711 quad-core Cortex-A72",
+      purchaseCost: 3500.0,
+      sellingPrice: 4800.0,
+      wholesalePrice: 4500.0,
+      quantity: 20,
+      minStock: 5,
+      maxStock: 50,
+      reorderLevel: 8,
+      warranty: "1 Year Warranty",
+      location: "Shelf B-2",
+      serialized: true,
+      serialNumbers: JSON.stringify(["PI4-001", "PI4-002", "PI4-003", "PI4-004"]),
+      tenantId: tenant2.id,
+    },
+  });
+
+  const allT2Prods = [t2Prod1, t2Prod2];
+  for (const p of allT2Prods) {
+    const qty1 = Math.ceil(p.quantity * 0.7);
+    const qty2 = Math.max(0, p.quantity - qty1);
+
+    await prisma.storeInventory.create({
+      data: {
+        productId: p.id,
+        storeId: tenant2Store1.id,
+        quantity: qty1,
+      },
+    });
+
+    await prisma.storeInventory.create({
+      data: {
+        productId: p.id,
+        storeId: tenant2Store2.id,
+        quantity: qty2,
+      },
+    });
+  }
+
+  const t2Customer = await prisma.customer.create({
+    data: {
+      id: "CUST-T2-0001",
+      firstName: "Alice",
+      lastName: "Wonderland",
+      mobile: "+639198889999",
+      email: "alice@wonder.com",
+      address: "Pasig Green Village",
+      city: "Pasig",
+      province: "Metro Manila",
+      loyaltyPoints: 10,
+      status: "ACTIVE",
+      tenantId: tenant2.id,
+    },
+  });
+
+  const t2Sale = await prisma.sale.create({
+    data: {
+      invoiceNo: "INV-BC-20260719-0001",
+      customerId: t2Customer.id,
+      subtotal: 5300.0,
+      tax: 636.0,
+      discount: 0.0,
+      total: 5936.0,
+      status: "COMPLETED",
+      paymentType: "CASH",
+      tenantId: tenant2.id,
+      createdBy: tenant2Sales.id,
+      storeId: tenant2Store1.id,
+      items: {
+        create: [
+          { productId: t2Prod1.id, quantity: 2, price: 250.0 },
+          { productId: t2Prod2.id, quantity: 1, price: 4800.0 },
+        ],
+      },
+      payments: {
+        create: [
+          { amount: 5936.0, type: "CASH", reference: "Cash payment" },
+        ],
+      },
+    },
+  });
+
+  await prisma.product.update({
+    where: { id: t2Prod1.id },
+    data: { quantity: { decrement: 2 } },
+  });
+  await prisma.product.update({
+    where: { id: t2Prod2.id },
+    data: { quantity: { decrement: 1 } },
+  });
+
+  await prisma.storeInventory.update({
+    where: { productId_storeId: { productId: t2Prod1.id, storeId: tenant2Store1.id } },
+    data: { quantity: { decrement: 2 } },
+  });
+  await prisma.storeInventory.update({
+    where: { productId_storeId: { productId: t2Prod2.id, storeId: tenant2Store1.id } },
+    data: { quantity: { decrement: 1 } },
+  });
+
+  await prisma.expense.create({
+    data: {
+      category: "UTILITIES",
+      amount: 4500.0,
+      description: "Internet and Power",
+      tenantId: tenant2.id,
+    },
+  });
+
+  console.log("Seeded second tenant details.");
   console.log("Seed completely successful!");
 
   // Copy to nontaxable.db if using SQLite
