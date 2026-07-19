@@ -1,6 +1,8 @@
-# EasyPOS Hub — Enterprise Computer Parts POS & SaaS Platform
+# csERP — Enterprise ERP & SaaS Platform
 
-EasyPOS Hub is a modern, production-grade, enterprise Point of Sale (POS) system specifically designed for computer parts retailers. It features role-based access control (RBAC), multi-factor authentication (MFA), detailed inventory management, digital signature repair tickets, real-time visual accounting dashboards, and SuperAdmin sanitization reset wizards.
+csERP is a modern, production-grade, enterprise Point of Sale (POS) system specifically designed for computer parts retailers. It features role-based access control (RBAC), multi-factor authentication (MFA), detailed inventory management, digital signature repair tickets, real-time visual accounting dashboards, and SuperAdmin sanitization reset wizards.
+
+Author : Chester Sigua
 
 ---
 
