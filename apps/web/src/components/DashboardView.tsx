@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { TrendingUp, RefreshCw, AlertTriangle, Cpu, DollarSign, Users, Shield, Building, Calendar, CreditCard, Globe, Sliders, CheckCircle, Save, X, FileText } from "lucide-react";
+import { TrendingUp, RefreshCw, AlertTriangle, Cpu, DollarSign, Banknote, Users, Shield, Building, Calendar, CreditCard, Globe, Sliders, CheckCircle, Save, X, FileText } from "lucide-react";
 import { api } from "../services/api";
 import { useAuthStore } from "../store/auth";
 import { useToastStore } from "../store/toast";
@@ -19,7 +19,9 @@ export function DashboardView() {
   const [tiers, setTiers] = useState<any[]>([]);
   const [editingTierIndex, setEditingTierIndex] = useState<number | null>(null);
   const [editingRate, setEditingRate] = useState<string>("");
+  const [editingAnnualRate, setEditingAnnualRate] = useState<string>("");
   const [savingTiers, setSavingTiers] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annually">("monthly");
 
   // Detailed modal overlay state
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -60,7 +62,10 @@ export function DashboardView() {
   // Handle tier rate saving
   const handleSaveTierRate = async (index: number) => {
     if (!editingRate || isNaN(Number(editingRate))) {
-      return addToast("Please specify a valid numerical rate.", "info");
+      return addToast("Please specify a valid monthly rate.", "info");
+    }
+    if (editingAnnualRate && isNaN(Number(editingAnnualRate))) {
+      return addToast("Annual rate must be a valid number.", "info");
     }
 
     setSavingTiers(true);
@@ -68,13 +73,14 @@ export function DashboardView() {
       const updatedTiers = [...tiers];
       updatedTiers[index] = {
         ...updatedTiers[index],
-        rate: Number(editingRate)
+        rate: Number(editingRate),
+        annualRate: editingAnnualRate ? Number(editingAnnualRate) : null
       };
 
       await api.post("/system/license-tiers", updatedTiers);
       setTiers(updatedTiers);
       setEditingTierIndex(null);
-      addToast(`License rate for ${updatedTiers[index].name} successfully updated!`, "success");
+      addToast(`License rates for ${updatedTiers[index].name} successfully updated!`, "success");
     } catch (err) {
       addToast("Failed to save license rates.", "error");
     } finally {
@@ -98,9 +104,16 @@ export function DashboardView() {
     
     // Sum pricing rates based on active subscriptions
     const potentialMonthlyRevenue = businesses.reduce((acc, curr) => {
-      const tierRate = tiers.find(t => t.key === curr.plan)?.rate || 0;
+      const tier = tiers.find(t => t.key === curr.plan);
+      const tierRate = tier?.rate || 0;
       return curr.status === "ACTIVE" ? acc + tierRate : acc;
     }, 0);
+    const potentialAnnualRevenue = businesses.reduce((acc, curr) => {
+      const tier = tiers.find(t => t.key === curr.plan);
+      const annualRate = tier?.annualRate ?? ((tier?.rate || 0) * 12);
+      return curr.status === "ACTIVE" ? acc + annualRate : acc;
+    }, 0);
+    const displayRevenue = billingCycle === "annually" ? potentialAnnualRevenue : potentialMonthlyRevenue;
 
     return (
       <div className="space-y-6">
@@ -129,7 +142,7 @@ export function DashboardView() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Businesses</span>
             <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <Building className="h-6 w-6 text-sky-500" />
-              <span>{totalBusinesses} Businesses</span>
+              <span>{totalBusinesses}</span>
             </div>
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-sky-500" />
           </div>
@@ -138,7 +151,7 @@ export function DashboardView() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Licenses</span>
             <div className="mt-2 text-2xl font-extrabold text-emerald-500 flex items-center gap-2">
               <CheckCircle className="h-6 w-6" />
-              <span>{activeLicenses} Active</span>
+              <span>{activeLicenses}</span>
             </div>
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500" />
           </div>
@@ -147,16 +160,41 @@ export function DashboardView() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Suspended Accounts</span>
             <div className="mt-2 text-2xl font-extrabold text-rose-500 flex items-center gap-2">
               <AlertTriangle className="h-6 w-6" />
-              <span>{suspendedLicenses} Accounts</span>
+              <span>{suspendedLicenses}</span>
             </div>
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-rose-500" />
           </div>
 
           <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MRR Potential</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{billingCycle === "annually" ? "ARR Potential" : "MRR Potential"}</span>
+              {/* Monthly / Annually toggle */}
+              <div className="flex items-center gap-0.5 rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+                <button
+                  onClick={() => setBillingCycle("monthly")}
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold transition-all ${
+                    billingCycle === "monthly"
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  Mo
+                </button>
+                <button
+                  onClick={() => setBillingCycle("annually")}
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold transition-all ${
+                    billingCycle === "annually"
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  Yr
+                </button>
+              </div>
+            </div>
             <div className="mt-2 text-2xl font-extrabold text-indigo-500 flex items-center gap-1">
-              <DollarSign className="h-6 w-6 shrink-0" />
-              <span>P{potentialMonthlyRevenue.toLocaleString()} / mo</span>
+              <Banknote className="h-6 w-6 shrink-0" />
+              <span>${displayRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / {billingCycle === "annually" ? "yr" : "mo"}</span>
             </div>
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-500" />
           </div>
@@ -246,10 +284,20 @@ export function DashboardView() {
 
           {/* Pricing & License Tiers Manager */}
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4 h-fit">
-            <h2 className="text-sm font-bold tracking-tight text-slate-800 dark:text-slate-200 flex items-center gap-2">
-              <CreditCard className="h-4.5 w-4.5 text-sky-500" />
-              <span>SaaS Pricing & License Tiers</span>
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold tracking-tight text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <CreditCard className="h-4.5 w-4.5 text-sky-500" />
+                <span>SaaS Pricing & License Tiers</span>
+              </h2>
+              {/* Billing cycle indicator */}
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                billingCycle === "annually"
+                  ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+              }`}>
+                {billingCycle === "annually" ? "Annual" : "Monthly"} rates
+              </span>
+            </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Centrally edit subscription plans pricing rates. Changes modify billing metrics dynamically.
             </p>
@@ -257,6 +305,8 @@ export function DashboardView() {
             <div className="space-y-4">
               {tiers.map((tier, index) => {
                 const isEditing = editingTierIndex === index;
+                const annualDisplayRate = tier.annualRate ?? tier.rate * 12;
+                const monthlyDisplayRate = tier.rate;
                 return (
                   <div key={tier.key} className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 space-y-2">
                     <div className="flex items-center justify-between">
@@ -266,50 +316,79 @@ export function DashboardView() {
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1">
-                      {isEditing ? (
-                        <div className="flex items-center gap-1.5 w-full">
-                          <span className="text-xs font-bold text-slate-400">P</span>
+                    {isEditing ? (
+                      <div className="space-y-2 pt-1">
+                        {/* Monthly rate row */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 w-14 shrink-0">Monthly</span>
+                          <span className="text-xs font-bold text-slate-400">$</span>
                           <input
                             type="number"
                             required
+                            placeholder="Monthly rate"
                             value={editingRate}
                             onChange={(e) => setEditingRate(e.target.value)}
-                            className="w-full rounded-lg border border-slate-200 bg-white p-1 text-xs dark:border-slate-750 dark:bg-slate-900 outline-none font-bold"
+                            className="w-full rounded-lg border border-slate-200 bg-white p-1 text-xs dark:border-slate-700 dark:bg-slate-900 outline-none font-bold"
                           />
+                        </div>
+                        {/* Annual rate row */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 w-14 shrink-0">Annual</span>
+                          <span className="text-xs font-bold text-slate-400">$</span>
+                          <input
+                            type="number"
+                            placeholder={`${(Number(editingRate) * 12).toFixed(2)} (×12 default)`}
+                            value={editingAnnualRate}
+                            onChange={(e) => setEditingAnnualRate(e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-white p-1 text-xs dark:border-slate-700 dark:bg-slate-900 outline-none font-bold"
+                          />
+                        </div>
+                        {/* Action buttons */}
+                        <div className="flex items-center justify-end gap-1.5 pt-0.5">
                           <button
                             onClick={() => handleSaveTierRate(index)}
                             disabled={savingTiers}
-                            className="p-1 rounded bg-sky-500 text-white hover:bg-sky-600 disabled:opacity-50"
-                            title="Save rate"
+                            className="flex items-center gap-1 px-2 py-1 rounded bg-sky-500 text-white text-[10px] font-bold hover:bg-sky-600 disabled:opacity-50"
                           >
-                            <Save className="h-3.5 w-3.5" />
+                            <Save className="h-3 w-3" /> Save
                           </button>
                           <button
                             onClick={() => setEditingTierIndex(null)}
-                            className="p-1 rounded border border-slate-200 text-slate-450 hover:bg-slate-50 dark:border-slate-800"
-                            title="Cancel"
+                            className="flex items-center gap-1 px-2 py-1 rounded border border-slate-200 text-slate-500 text-[10px] hover:bg-slate-50 dark:border-slate-800"
                           >
-                            <X className="h-3.5 w-3.5" />
+                            <X className="h-3 w-3" /> Cancel
                           </button>
                         </div>
-                      ) : (
-                        <>
+                      </div>
+                    ) : (
+                      <div className="flex items-end justify-between pt-1">
+                        <div>
                           <span className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
-                            P{tier.rate} <span className="text-[10px] text-slate-400 font-normal">/ {tier.billing}</span>
+                            ${(billingCycle === "annually" ? annualDisplayRate : monthlyDisplayRate).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <span className="text-[10px] text-slate-400 font-normal ml-1">/ {billingCycle === "annually" ? "yr" : tier.billing}</span>
                           </span>
-                          <button
-                            onClick={() => {
-                              setEditingTierIndex(index);
-                              setEditingRate(String(tier.rate));
-                            }}
-                            className="text-xs text-sky-500 hover:text-sky-600 hover:underline font-bold"
-                          >
-                            Edit rate
-                          </button>
-                        </>
-                      )}
-                    </div>
+                          {/* Secondary rate hint */}
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {billingCycle === "annually"
+                              ? `$${monthlyDisplayRate.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / mo`
+                              : tier.annualRate
+                                ? `$${annualDisplayRate.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / yr`
+                                : `$${(tier.rate * 12).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / yr (×12)`
+                            }
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setEditingTierIndex(index);
+                            setEditingRate(String(tier.rate));
+                            setEditingAnnualRate(tier.annualRate != null ? String(tier.annualRate) : "");
+                          }}
+                          className="text-xs text-sky-500 hover:text-sky-600 hover:underline font-bold"
+                        >
+                          Edit rates
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

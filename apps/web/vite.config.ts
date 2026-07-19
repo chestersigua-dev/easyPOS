@@ -6,6 +6,8 @@ export default defineConfig({
   base: "./",
   server: {
     port: 5173,
+    allowedHosts: ["aa679eff93c536vlc
+      .lhr.life"],
     proxy: {
       "/api": {
         target: "http://localhost:8085",

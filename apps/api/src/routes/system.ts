@@ -967,9 +967,9 @@ export async function systemRoutes(fastify: FastifyInstance) {
     }
 
     const defaultTiers = [
-      { key: "STARTER", name: "Starter Tier", rate: 49, billing: "monthly", modules: ["DASHBOARD", "POS", "CUSTOMERS"] },
-      { key: "PROFESSIONAL", name: "Professional Tier", rate: 99, billing: "monthly", modules: ["DASHBOARD", "POS", "PRODUCTS", "CUSTOMERS", "SUPPLIERS"] },
-      { key: "ENTERPRISE", name: "Enterprise Tier", rate: 199, billing: "monthly", modules: ["DASHBOARD", "POS", "PRODUCTS", "REPAIRS", "CUSTOMERS", "SUPPLIERS", "ACCOUNTING"] }
+      { key: "STARTER", name: "Starter Tier", rate: 49, annualRate: 490, billing: "monthly", modules: ["DASHBOARD", "POS", "CUSTOMERS"] },
+      { key: "PROFESSIONAL", name: "Professional Tier", rate: 99, annualRate: 990, billing: "monthly", modules: ["DASHBOARD", "POS", "PRODUCTS", "CUSTOMERS", "SUPPLIERS"] },
+      { key: "ENTERPRISE", name: "Enterprise Tier", rate: 199, annualRate: 1990, billing: "monthly", modules: ["DASHBOARD", "POS", "PRODUCTS", "REPAIRS", "CUSTOMERS", "SUPPLIERS", "ACCOUNTING"] }
     ];
 
     await prisma.setting.upsert({
